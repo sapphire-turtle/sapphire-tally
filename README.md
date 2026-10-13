@@ -18,6 +18,14 @@ sapphire-tally mcp                           # MCP over stdio, for an agent to l
 
 Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[mcp] http = true` in the app's `server.toml`.
 
+## Desktop app
+
+`sapphire-tally-desktop` shows a year of stamps as a GitHub-style heatmap — darker days have more stamps — for all activities or the one selected. Click a day to list its stamps, and a stamp to see, edit or re-time it; **New stamp**, **New activity** and **Stamp now** add records. The Sync tab picks the server's workspace and manages the workgroup. Like the CLI, it talks to the running `sapphire-tally` server and never starts one.
+
+```sh
+cargo run -p sapphire-tally-desktop
+```
+
 ## Data format
 
 - `<workspace>/activities/<grain-id>.md` — an activity: `title` (required) and `unit` (optional: day/week/month) in front matter, the description as the body
