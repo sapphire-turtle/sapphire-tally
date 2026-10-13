@@ -20,7 +20,7 @@ Sync goes through the host's `sapphire-bridge`; without one running, the server 
 
 ## Desktop app
 
-`sapphire-tally-desktop` shows a year of stamps as a GitHub-style heatmap — darker days have more stamps — for all activities or the one selected. Click a day to list its stamps, and a stamp to see, edit or re-time it; **New stamp**, **New activity** and **Stamp now** add records. The Sync tab picks the server's workspace and manages the workgroup. Like the CLI, it talks to the running `sapphire-tally` server and never starts one.
+`sapphire-tally-desktop` lists every activity with a year of its stamps as a GitHub-style heatmap — darker days have more stamps. Click a day to list its stamps, and a stamp to see, edit or delete it; **Stamp now**, **Stamp…**, **New activity** and **Details** add, change and delete records (deleting an activity deletes its stamps, after a confirmation). The Sync tab picks the server's workspace and manages the workgroup. Like the CLI, it talks to the running `sapphire-tally` server and never starts one.
 
 ```sh
 cargo run -p sapphire-tally-desktop
