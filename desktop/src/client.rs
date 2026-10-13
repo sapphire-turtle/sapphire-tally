@@ -102,7 +102,9 @@ mod tests {
 
     use sapphire_framework::backend::protocol as proto;
     use sapphire_tally_core::{Activity, AppKind, Stamp, TALLY_CTX};
-    use sapphire_tally_mcp::methods::{EmptyParams, QueryParams, names};
+    use sapphire_tally_mcp::methods::{
+        ActivityDeleteParams, ActivityDeleted, EmptyParams, IdParams, QueryParams, names,
+    };
 
     use super::*;
     use crate::form::{ActivityForm, StampForm};
@@ -222,6 +224,48 @@ mod tests {
             .await
             .expect("stamps parse");
         assert_eq!(stamps.len(), 1);
+
+        // What the delete confirmations send.
+        let deleted: Stamp = client
+            .read(
+                names::STAMP_DELETE,
+                IdParams {
+                    id: stamp.id.to_string(),
+                },
+            )
+            .await
+            .expect("stamp_delete");
+        assert_eq!(deleted.id, stamp.id);
+        let other: Stamp = client
+            .read(
+                names::STAMP_ADD,
+                StampForm::new(Some(activity.id), now)
+                    .to_add_params()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let deleted: ActivityDeleted = client
+            .read(
+                names::ACTIVITY_DELETE,
+                ActivityDeleteParams {
+                    id: activity.id.to_string(),
+                    with_stamps: true,
+                },
+            )
+            .await
+            .expect("activity_delete");
+        assert_eq!(deleted.stamps_deleted, 1);
+        let err = client
+            .call(
+                names::STAMP_DELETE,
+                IdParams {
+                    id: other.id.to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(err.contains("not found"), "went with the activity: {err}");
 
         let _: serde_json::Value = client
             .client()
