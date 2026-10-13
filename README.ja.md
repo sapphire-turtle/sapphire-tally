@@ -18,6 +18,14 @@ sapphire-tally mcp                           # stdio経由のMCP（エージェ�
 
 同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `server.toml` で `[mcp] http = true` を設定すると有効になります。
 
+## デスクトップアプリ
+
+`sapphire-tally-desktop` は、1年分のスタンプをGitHubの草のようなヒートマップで表示します（スタンプが多い日ほど濃い色）。全種目まとめても、選んだ種目だけでも表示できます。日をクリックするとその日のスタンプ一覧、スタンプをクリックすると詳細表示と編集ができ、**New stamp**・**New activity**・**Stamp now** で記録を追加できます。Syncタブではサーバーのワークスペース選択とワークグループの管理ができます。CLIと同じく、動作中の `sapphire-tally` サーバーと通信し、自分でサーバーを起動することはありません。
+
+```sh
+cargo run -p sapphire-tally-desktop
+```
+
 ## データ形式
 
 - `<workspace>/activities/<grain-id>.md` — 種目。フロントマターに`title`（必須）と`unit`（任意: day/week/month）、本文に説明
