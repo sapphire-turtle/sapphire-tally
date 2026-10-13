@@ -8,11 +8,17 @@ pub enum Error {
     #[error("failed to parse {path}: {message}")]
     Parse { path: String, message: String },
 
+    #[error("failed to write a record: {0}")]
+    Render(String),
+
     #[error("invalid grain-id `{0}`")]
     InvalidId(String),
 
     #[error("activity `{0}` not found")]
     ActivityNotFound(String),
+
+    #[error("stamp `{0}` not found")]
+    StampNotFound(String),
 
     #[error("`{0}` already exists")]
     AlreadyExists(String),

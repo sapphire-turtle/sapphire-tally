@@ -2,7 +2,7 @@
 
 > 言語: [English](README.md) | **日本語**
 
-sapphire-framework上に構築された、GitHub草風ヒートマップ付きスタンプトラッカー。ファイルベース・ローカルファースト・人間とAIエージェントの協働のために作られました。スタンプは活動＋日時＋任意の一行コメントからなり、スタンプごとにプレーンなTOMLファイル1つとして保存されます。
+sapphire-framework上に構築された、GitHub草風ヒートマップ付きスタンプトラッカー。ファイルベース・ローカルファースト・人間とAIエージェントの協働のために作られました。スタンプは活動＋日時＋任意のコメントからなり、スタンプごとにYAMLフロントマター付きのMarkdownファイル1つとして保存されます。
 
 **開発中です。** 単一のバイナリ `sapphire-tally` がアプリサーバーを動かし、frameworkの動詞（`workspace`・`workgroup`・`mcp` など）も備えます。
 
@@ -20,10 +20,20 @@ sapphire-tally mcp                           # stdio経由のMCP（エージェ�
 
 ## データ形式
 
-- `<workspace>/activities/<grain-id>.toml` — 種目（title必須、unit任意: day/week/month）
-- `<workspace>/stamps/<grain-id>.toml` — スタンプ（activity/timestamp必須、comment任意）
+- `<workspace>/activities/<grain-id>.md` — 種目。フロントマターに`title`（必須）と`unit`（任意: day/week/month）、本文に説明
+- `<workspace>/stamps/<grain-id>.md` — スタンプ。フロントマターに`activity`と`timestamp`、本文にコメント
 - ファイル名はgrain-id（7文字BASE32）。ファイル内にもidフィールドを持つが、ファイル名が正
+
+```markdown
+---
+id: 012atvx
+activity: 012atvw
+timestamp: "2026-09-05T09:12:00+09:00"
+---
+
+横浜で買った
+```
 
 ## MCPツール
 
-`activity_add` / `activity_list` / `stamp_add` / `stamp_list` / `heatmap` と、frameworkの読み取り専用ツール（`status`・`workspace_show`・`workspace_search`・`workspace_read_file`・`workspace_list_dir`・`workgroup_show`・`device_list`）
+`activity_add` / `activity_get` / `activity_update` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_list` / `heatmap` と、frameworkの読み取り専用ツール（`status`・`workspace_show`・`workspace_search`・`workspace_read_file`・`workspace_list_dir`・`workgroup_show`・`device_list`）
