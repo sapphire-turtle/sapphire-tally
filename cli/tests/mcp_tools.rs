@@ -98,6 +98,7 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
         .activity_add(Parameters(ActivityAddParams {
             title: "practice".into(),
             unit: None,
+            description: None,
         }))
         .await
         .expect("activity_add");
@@ -112,13 +113,13 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
         }))
         .await
         .expect("stamp_add");
-    assert!(
-        std::fs::read_dir(data.join("stamps"))
-            .unwrap()
-            .next()
-            .is_some(),
-        "the stamp is in the selected workspace"
-    );
+    let file = std::fs::read_dir(data.join("stamps"))
+        .unwrap()
+        .next()
+        .expect("the stamp is in the selected workspace")
+        .unwrap()
+        .path();
+    assert_eq!(file.extension().and_then(|e| e.to_str()), Some("md"));
 
     let heat = tools
         .heatmap(Parameters(QueryParams {

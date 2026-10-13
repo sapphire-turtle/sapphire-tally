@@ -1,71 +1,86 @@
-//! データディレクトリをまたいだ操作（open/create/list/add）を提供する facade。
+//! The facade over one data directory: open, create, read, update, list,
+//! and the heatmap.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Datelike, FixedOffset, Local, NaiveDate};
 use grain_id::GrainId;
 
 use crate::error::{Error, Result};
-use crate::model::{Activity, HeatmapBucket, Stamp, Unit};
+use crate::model::{Activity, ActivityUpdate, HeatmapBucket, Stamp, StampUpdate, Unit};
 use crate::store;
 
-/// データディレクトリのルート。`stamps/` と `activities/` の平坦配置を仮定する。
+/// A data directory's root, holding `stamps/` and `activities/` flat.
 #[derive(Debug, Clone)]
 pub struct Tally {
     pub root: PathBuf,
 }
 
 impl Tally {
-    /// データディレクトリを開く。`stamps/` `activities/` が無ければ作成する。
+    /// Open a data directory, creating `stamps/` and `activities/` if missing.
     pub fn open(root: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(root.join("stamps"))?;
         std::fs::create_dir_all(root.join("activities"))?;
         Ok(Self { root })
     }
 
-    /// 新種目を作成して grain-id を割り当てる。
-    pub fn create_activity(&self, title: &str, unit: Option<Unit>) -> Result<Activity> {
+    /// Create an activity under a new grain-id.
+    pub fn create_activity(
+        &self,
+        title: &str,
+        unit: Option<Unit>,
+        description: Option<String>,
+    ) -> Result<Activity> {
         let activity = Activity {
             id: GrainId::random(),
             title: title.to_string(),
             unit,
+            description: description.as_deref().and_then(store::normalize_text),
         };
-        store::write_activity(&self.root, &activity)?;
+        store::create_activity(&self.root, &activity)?;
         Ok(activity)
     }
 
-    /// 全種目を title 昇順（Unicodeコードポイント順）で返す。壊れたファイルは警告してスキップ。
+    /// One activity, or [`Error::ActivityNotFound`].
+    pub fn get_activity(&self, id: GrainId) -> Result<Activity> {
+        if !self.exists_activity(id) {
+            return Err(Error::ActivityNotFound(id.to_string()));
+        }
+        store::read_activity(&self.root, id)
+    }
+
+    /// Change an activity's fields, keeping the ones `update` leaves `None`.
+    pub fn update_activity(&self, id: GrainId, update: ActivityUpdate) -> Result<Activity> {
+        let mut activity = self.get_activity(id)?;
+        if let Some(title) = update.title {
+            activity.title = title;
+        }
+        if let Some(unit) = update.unit {
+            activity.unit = Some(unit);
+        }
+        if let Some(description) = update.description {
+            activity.description = store::normalize_text(&description);
+        }
+        store::replace_activity(&self.root, &activity)?;
+        Ok(activity)
+    }
+
+    /// Every activity, by title (Unicode code point order). An unreadable
+    /// file is skipped with a warning.
     pub fn list_activities(&self) -> Result<Vec<Activity>> {
         let mut out = Vec::new();
-        for entry in std::fs::read_dir(self.root.join("activities"))? {
-            let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
-                continue;
-            }
-            let stem = match path.file_stem().and_then(|s| s.to_str()) {
-                Some(s) => s,
-                None => continue,
-            };
-            let id = match stem.parse::<GrainId>() {
-                Ok(id) => id,
-                Err(_) => {
-                    tracing::warn!(path = %path.display(), "skipping file with invalid grain-id name");
-                    continue;
-                }
-            };
+        for id in record_ids(&self.root.join("activities"))? {
             match store::read_activity(&self.root, id) {
                 Ok(a) => out.push(a),
-                Err(e) => {
-                    tracing::warn!(path = %path.display(), "skipping unreadable activity: {e}")
-                }
+                Err(e) => tracing::warn!(%id, "skipping unreadable activity: {e}"),
             }
         }
         out.sort_by(|a, b| a.title.cmp(&b.title));
         Ok(out)
     }
 
-    /// スタンプ追加。timestamp 省略時はサーバーの現在時刻を使う。
+    /// Add a stamp. Without a timestamp, the current local time is used.
     pub fn add_stamp(
         &self,
         activity: GrainId,
@@ -79,14 +94,42 @@ impl Tally {
             id: GrainId::random(),
             activity,
             timestamp: timestamp.unwrap_or_else(|| Local::now().fixed_offset()),
-            comment: comment.filter(|c| !c.trim().is_empty()),
+            comment: comment.as_deref().and_then(store::normalize_text),
         };
-        store::write_stamp(&self.root, &stamp)?;
+        store::create_stamp(&self.root, &stamp)?;
         Ok(stamp)
     }
 
-    /// スタンプ一覧。activity・日付範囲（両端含む、日付判定はスタンプ自身のオフセット基準）
-    /// で絞り込み、timestamp 昇順。
+    /// One stamp, or [`Error::StampNotFound`].
+    pub fn get_stamp(&self, id: GrainId) -> Result<Stamp> {
+        if !store::stamp_path(&self.root, id).exists() {
+            return Err(Error::StampNotFound(id.to_string()));
+        }
+        store::read_stamp(&self.root, id)
+    }
+
+    /// Change a stamp's fields, keeping the ones `update` leaves `None`. A
+    /// new activity must exist.
+    pub fn update_stamp(&self, id: GrainId, update: StampUpdate) -> Result<Stamp> {
+        let mut stamp = self.get_stamp(id)?;
+        if let Some(activity) = update.activity {
+            if !self.exists_activity(activity) {
+                return Err(Error::ActivityNotFound(activity.to_string()));
+            }
+            stamp.activity = activity;
+        }
+        if let Some(timestamp) = update.timestamp {
+            stamp.timestamp = timestamp;
+        }
+        if let Some(comment) = update.comment {
+            stamp.comment = store::normalize_text(&comment);
+        }
+        store::replace_stamp(&self.root, &stamp)?;
+        Ok(stamp)
+    }
+
+    /// Stamps, filtered by activity and an inclusive date range (each stamp's
+    /// date in its own offset), by timestamp.
     pub fn list_stamps(
         &self,
         activity: Option<GrainId>,
@@ -94,26 +137,11 @@ impl Tally {
         to: Option<NaiveDate>,
     ) -> Result<Vec<Stamp>> {
         let mut out = Vec::new();
-        for entry in std::fs::read_dir(self.root.join("stamps"))? {
-            let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
-                continue;
-            }
-            let stem = match path.file_stem().and_then(|s| s.to_str()) {
-                Some(s) => s,
-                None => continue,
-            };
-            let id = match stem.parse::<GrainId>() {
-                Ok(id) => id,
-                Err(_) => {
-                    tracing::warn!(path = %path.display(), "skipping file with invalid grain-id name");
-                    continue;
-                }
-            };
+        for id in record_ids(&self.root.join("stamps"))? {
             let stamp = match store::read_stamp(&self.root, id) {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::warn!(path = %path.display(), "skipping unreadable stamp: {e}");
+                    tracing::warn!(%id, "skipping unreadable stamp: {e}");
                     continue;
                 }
             };
@@ -134,8 +162,8 @@ impl Tally {
         Ok(out)
     }
 
-    /// 種目の unit に応じた粒度で、期間内のスタンプ数をバケット化する。
-    /// 空バケットは作らない（カウント0の日は含めない）。
+    /// Count the stamps in the period per bucket of each activity's unit.
+    /// Empty buckets are left out.
     pub fn heatmap(
         &self,
         activity: Option<GrainId>,
@@ -183,6 +211,29 @@ impl Tally {
     }
 }
 
+/// The ids of the record files in `dir`: `<grain-id>.md`. Other files are
+/// ignored, and a `.md` whose name is not a grain-id is skipped with a
+/// warning.
+fn record_ids(dir: &Path) -> Result<Vec<GrainId>> {
+    let mut ids = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some(store::EXTENSION) {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        match stem.parse::<GrainId>() {
+            Ok(id) => ids.push(id),
+            Err(_) => {
+                tracing::warn!(path = %path.display(), "skipping file with invalid grain-id name")
+            }
+        }
+    }
+    Ok(ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,12 +258,12 @@ mod tests {
     #[test]
     fn create_then_list_activities_sorted_by_title() {
         let (_dir, t) = tally();
-        let b = t.create_activity("筋トレ", None).unwrap();
+        let b = t.create_activity("筋トレ", None, None).unwrap();
         let a = t
-            .create_activity("タピオカミルクティー", Some(Unit::Week))
+            .create_activity("タピオカミルクティー", Some(Unit::Week), None)
             .unwrap();
         let list = t.list_activities().unwrap();
-        // "タピオカ..."(U+30BF…) < "筋トレ"(U+7B4B…) なので codepoint 順でタピオカが先
+        // "タピオカ..." (U+30BF…) < "筋トレ" (U+7B4B…): code point order puts it first
         assert_eq!(list[0].title, "タピオカミルクティー");
         assert_eq!(list[0].id, a.id);
         assert_eq!(list[0].unit, Some(Unit::Week));
@@ -223,7 +274,7 @@ mod tests {
     #[test]
     fn add_stamp_without_timestamp_uses_now_and_roundtrips() {
         let (_dir, t) = tally();
-        let a = t.create_activity("筋トレ", None).unwrap();
+        let a = t.create_activity("筋トレ", None, None).unwrap();
         let s = t.add_stamp(a.id, None, Some("30回".into())).unwrap();
         assert_eq!(s.activity, a.id);
         assert!(s.timestamp.timestamp() > 0);
@@ -246,22 +297,23 @@ mod tests {
     #[test]
     fn orphan_and_broken_stamps_are_skipped_with_warn() {
         let (dir, t) = tally();
-        // 存在しない activity を参照する孤立スタンプ
+        // An orphan: its activity does not exist.
         std::fs::write(
-            dir.path().join("stamps/0000001.toml"),
-            "id = \"0000001\"\nactivity = \"zzzzzzz\"\ntimestamp = \"2026-09-05T09:12:00+09:00\"\n",
+            dir.path().join("stamps/0000001.md"),
+            "---\nid: '0000001'\nactivity: zzzzzzz\ntimestamp: 2026-09-05T09:12:00+09:00\n---\n",
         )
         .unwrap();
-        // 壊れた TOML
-        std::fs::write(dir.path().join("stamps/0000002.toml"), "not toml [[[").unwrap();
+        // No front matter at all, and front matter that is not YAML.
+        std::fs::write(dir.path().join("stamps/0000002.md"), "just text").unwrap();
+        std::fs::write(dir.path().join("stamps/0000003.md"), "---\n: [\n---\n").unwrap();
         assert!(t.list_stamps(None, None, None).unwrap().is_empty());
     }
 
     #[test]
     fn stamps_filter_by_activity_and_date_range_and_sort_by_timestamp() {
         let (_dir, t) = tally();
-        let a = t.create_activity("タピオカ", None).unwrap();
-        let b = t.create_activity("筋トレ", None).unwrap();
+        let a = t.create_activity("タピオカ", None, None).unwrap();
+        let b = t.create_activity("筋トレ", None, None).unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T10:00:00+09:00")), None)
             .unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-04T10:00:00+09:00")), None)
@@ -285,9 +337,80 @@ mod tests {
     }
 
     #[test]
+    fn updates_keep_the_fields_they_leave_out() {
+        let (_dir, t) = tally();
+        let a = t
+            .create_activity("筋トレ", Some(Unit::Week), Some("腕立て".into()))
+            .unwrap();
+        let a2 = t
+            .update_activity(
+                a.id,
+                ActivityUpdate {
+                    title: Some("筋トレ（朝）".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(a2.unit, Some(Unit::Week));
+        assert_eq!(a2.description.as_deref(), Some("腕立て"));
+        assert_eq!(t.get_activity(a.id).unwrap(), a2);
+
+        let cleared = t
+            .update_activity(
+                a.id,
+                ActivityUpdate {
+                    description: Some("  ".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(cleared.description, None);
+
+        let s = t
+            .add_stamp(
+                a.id,
+                Some(ts("2026-09-05T09:12:00+09:00")),
+                Some("30回".into()),
+            )
+            .unwrap();
+        let s2 = t
+            .update_stamp(
+                s.id,
+                StampUpdate {
+                    timestamp: Some(ts("2026-09-06T07:00:00+09:00")),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(s2.comment.as_deref(), Some("30回"));
+        assert_eq!(t.get_stamp(s.id).unwrap(), s2);
+    }
+
+    #[test]
+    fn a_stamp_cannot_move_to_an_unknown_activity() {
+        let (_dir, t) = tally();
+        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let s = t.add_stamp(a.id, None, None).unwrap();
+        let err = t
+            .update_stamp(
+                s.id,
+                StampUpdate {
+                    activity: Some("zzzzzzz".parse().unwrap()),
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(err, Error::ActivityNotFound(_)), "{err}");
+        assert!(matches!(
+            t.get_stamp("zzzzzzz".parse().unwrap()).unwrap_err(),
+            Error::StampNotFound(_)
+        ));
+    }
+
+    #[test]
     fn heatmap_counts_per_day_by_default() {
         let (_dir, t) = tally();
-        let a = t.create_activity("タピオカ", None).unwrap();
+        let a = t.create_activity("タピオカ", None, None).unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T09:00:00+09:00")), None)
             .unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T21:00:00+09:00")), None)
@@ -304,13 +427,17 @@ mod tests {
     #[test]
     fn heatmap_groups_by_week_and_month_per_activity_unit() {
         let (_dir, t) = tally();
-        let a = t.create_activity("週一習慣", Some(Unit::Week)).unwrap();
-        // 2026-W36（2026-08-31〜09-06）にまたがる2件
+        let a = t
+            .create_activity("週一習慣", Some(Unit::Week), None)
+            .unwrap();
+        // Two stamps inside 2026-W36 (2026-08-31 to 09-06).
         t.add_stamp(a.id, Some(ts("2026-09-01T09:00:00+09:00")), None)
             .unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-05T09:00:00+09:00")), None)
             .unwrap();
-        let m = t.create_activity("月一習慣", Some(Unit::Month)).unwrap();
+        let m = t
+            .create_activity("月一習慣", Some(Unit::Month), None)
+            .unwrap();
         t.add_stamp(m.id, Some(ts("2026-09-15T09:00:00+09:00")), None)
             .unwrap();
 

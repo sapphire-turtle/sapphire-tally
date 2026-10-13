@@ -13,10 +13,10 @@ redb-store = ["sapphire-workspace/redb-store"]
 [dependencies]
 chrono.workspace = true
 grain-id = { workspace = true, features = ["schemars"] }
+sapphire-frontmatter.workspace = true
 sapphire-workspace.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-toml.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

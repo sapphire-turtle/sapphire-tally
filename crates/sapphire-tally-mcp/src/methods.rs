@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use sapphire_framework::ipc::{RequestCtx, Router, RpcError};
-use sapphire_tally_core::{Tally, Unit};
+use sapphire_tally_core::{ActivityUpdate, StampUpdate, Tally, Unit};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Where a call finds its tally: asked once per call.
@@ -21,8 +21,12 @@ pub type StateSource = Arc<dyn Fn() -> std::io::Result<Tally> + Send + Sync>;
 /// The tally's methods, `sapphire-tally.<tool>`.
 pub mod names {
     pub const ACTIVITY_ADD: &str = "sapphire-tally.activity_add";
+    pub const ACTIVITY_GET: &str = "sapphire-tally.activity_get";
+    pub const ACTIVITY_UPDATE: &str = "sapphire-tally.activity_update";
     pub const ACTIVITY_LIST: &str = "sapphire-tally.activity_list";
     pub const STAMP_ADD: &str = "sapphire-tally.stamp_add";
+    pub const STAMP_GET: &str = "sapphire-tally.stamp_get";
+    pub const STAMP_UPDATE: &str = "sapphire-tally.stamp_update";
     pub const STAMP_LIST: &str = "sapphire-tally.stamp_list";
     pub const HEATMAP: &str = "sapphire-tally.heatmap";
 }
@@ -45,11 +49,30 @@ pub fn register(router: Router, source: StateSource) -> Router {
     );
     let router = route(
         router,
+        names::ACTIVITY_GET,
+        &source,
+        TallyMethods::activity_get,
+    );
+    let router = route(
+        router,
+        names::ACTIVITY_UPDATE,
+        &source,
+        TallyMethods::activity_update,
+    );
+    let router = route(
+        router,
         names::ACTIVITY_LIST,
         &source,
         TallyMethods::activity_list,
     );
     let router = route(router, names::STAMP_ADD, &source, TallyMethods::stamp_add);
+    let router = route(router, names::STAMP_GET, &source, TallyMethods::stamp_get);
+    let router = route(
+        router,
+        names::STAMP_UPDATE,
+        &source,
+        TallyMethods::stamp_update,
+    );
     let router = route(router, names::STAMP_LIST, &source, TallyMethods::stamp_list);
     route(router, names::HEATMAP, &source, TallyMethods::heatmap)
 }
@@ -104,6 +127,30 @@ pub struct ActivityAddParams {
     /// Display granularity: day/week/month (day when omitted).
     #[serde(default)]
     pub unit: Option<String>,
+    /// Free Markdown text about the activity.
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct IdParams {
+    /// The record's grain-id.
+    pub id: String,
+}
+
+/// Omitted fields stay as they are.
+#[derive(Debug, Default, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ActivityUpdateParams {
+    /// The activity's grain-id.
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    /// day/week/month.
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Free Markdown text. An empty string removes it.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
@@ -113,6 +160,23 @@ pub struct StampAddParams {
     /// omitted.
     #[serde(default)]
     pub timestamp: Option<String>,
+    /// Free Markdown text about this stamp.
+    #[serde(default)]
+    pub comment: Option<String>,
+}
+
+/// Omitted fields stay as they are.
+#[derive(Debug, Default, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct StampUpdateParams {
+    /// The stamp's grain-id.
+    pub id: String,
+    /// Move the stamp to another activity, by grain-id.
+    #[serde(default)]
+    pub activity: Option<String>,
+    /// ISO 8601 timestamp with a timezone.
+    #[serde(default)]
+    pub timestamp: Option<String>,
+    /// Free Markdown text. An empty string removes it.
     #[serde(default)]
     pub comment: Option<String>,
 }
@@ -139,11 +203,29 @@ impl TallyMethods {
 
     pub fn activity_add(&self, p: ActivityAddParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
-            let unit = match p.unit.as_deref() {
-                Some(s) => Some(Unit::parse_unit(s).map_err(anyhow::Error::msg)?),
-                None => None,
+            let unit = parse_unit(p.unit.as_deref())?;
+            let a = self.tally.create_activity(&p.title, unit, p.description)?;
+            Ok(serde_json::to_string_pretty(&a)?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn activity_get(&self, p: IdParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let a = self.tally.get_activity(parse_id(&p.id)?)?;
+            Ok(serde_json::to_string_pretty(&a)?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn activity_update(&self, p: ActivityUpdateParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let update = ActivityUpdate {
+                title: p.title,
+                unit: parse_unit(p.unit.as_deref())?,
+                description: p.description,
             };
-            let a = self.tally.create_activity(&p.title, unit)?;
+            let a = self.tally.update_activity(parse_id(&p.id)?, update)?;
             Ok(serde_json::to_string_pretty(&a)?)
         })()
         .map_err(|e| e.to_string())
@@ -159,18 +241,30 @@ impl TallyMethods {
 
     pub fn stamp_add(&self, p: StampAddParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
-            let activity = p
-                .activity
-                .parse()
-                .map_err(|_| anyhow::anyhow!("invalid grain-id `{}`", p.activity))?;
-            let ts = match p.timestamp.as_deref() {
-                Some(s) => Some(
-                    chrono::DateTime::parse_from_rfc3339(s)
-                        .map_err(|e| anyhow::anyhow!("invalid timestamp: {e}"))?,
-                ),
-                None => None,
-            };
+            let activity = parse_id(&p.activity)?;
+            let ts = parse_timestamp(p.timestamp.as_deref())?;
             let s = self.tally.add_stamp(activity, ts, p.comment)?;
+            Ok(serde_json::to_string_pretty(&s)?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn stamp_get(&self, p: IdParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let s = self.tally.get_stamp(parse_id(&p.id)?)?;
+            Ok(serde_json::to_string_pretty(&s)?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn stamp_update(&self, p: StampUpdateParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let update = StampUpdate {
+                activity: p.activity.as_deref().map(parse_id).transpose()?,
+                timestamp: parse_timestamp(p.timestamp.as_deref())?,
+                comment: p.comment,
+            };
+            let s = self.tally.update_stamp(parse_id(&p.id)?, update)?;
             Ok(serde_json::to_string_pretty(&s)?)
         })()
         .map_err(|e| e.to_string())
@@ -204,18 +298,31 @@ impl QueryParams {
         Option<chrono::NaiveDate>,
         Option<chrono::NaiveDate>,
     )> {
-        let activity = self
-            .activity
-            .as_deref()
-            .map(|s| {
-                s.parse::<grain_id::GrainId>()
-                    .map_err(|_| anyhow::anyhow!("invalid grain-id `{s}`"))
-            })
-            .transpose()?;
+        let activity = self.activity.as_deref().map(parse_id).transpose()?;
         let from = parse_date(self.from.as_deref(), "from")?;
         let to = parse_date(self.to.as_deref(), "to")?;
         Ok((activity, from, to))
     }
+}
+
+fn parse_id(s: &str) -> anyhow::Result<grain_id::GrainId> {
+    s.parse()
+        .map_err(|_| anyhow::anyhow!("invalid grain-id `{s}`"))
+}
+
+fn parse_unit(s: Option<&str>) -> anyhow::Result<Option<Unit>> {
+    s.map(|s| Unit::parse_unit(s).map_err(anyhow::Error::msg))
+        .transpose()
+}
+
+fn parse_timestamp(
+    s: Option<&str>,
+) -> anyhow::Result<Option<chrono::DateTime<chrono::FixedOffset>>> {
+    s.map(|s| {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .map_err(|e| anyhow::anyhow!("invalid timestamp: {e}"))
+    })
+    .transpose()
 }
 
 fn parse_date(s: Option<&str>, field: &str) -> anyhow::Result<Option<chrono::NaiveDate>> {
@@ -243,6 +350,7 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "タピオカミルクティー".into(),
                 unit: Some("week".into()),
+                description: None,
             })
             .unwrap();
         let created: serde_json::Value = serde_json::from_str(&created).unwrap();
@@ -280,6 +388,54 @@ mod tests {
     }
 
     #[test]
+    fn get_and_update_roundtrip() {
+        let (_dir, m) = methods();
+        let created = m
+            .activity_add(ActivityAddParams {
+                title: "筋トレ".into(),
+                unit: None,
+                description: Some("毎朝".into()),
+            })
+            .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&created).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        m.activity_update(ActivityUpdateParams {
+            id: id.clone(),
+            unit: Some("month".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let got: serde_json::Value =
+            serde_json::from_str(&m.activity_get(IdParams { id: id.clone() }).unwrap()).unwrap();
+        assert_eq!(got["unit"], "month");
+        assert_eq!(got["description"], "毎朝");
+
+        let stamp = m
+            .stamp_add(StampAddParams {
+                activity: id,
+                timestamp: Some("2026-09-05T09:12:00+09:00".into()),
+                comment: Some("30回".into()),
+            })
+            .unwrap();
+        let stamp_id = serde_json::from_str::<serde_json::Value>(&stamp).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        m.stamp_update(StampUpdateParams {
+            id: stamp_id.clone(),
+            comment: Some(String::new()),
+            ..Default::default()
+        })
+        .unwrap();
+        let got: serde_json::Value =
+            serde_json::from_str(&m.stamp_get(IdParams { id: stamp_id }).unwrap()).unwrap();
+        assert!(got.get("comment").is_none(), "{got}");
+        assert_eq!(got["timestamp"], "2026-09-05T09:12:00+09:00");
+    }
+
+    #[test]
     fn stamp_on_unknown_activity_returns_tool_error() {
         let (_dir, m) = methods();
         let err = m
@@ -299,6 +455,7 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "x".into(),
                 unit: Some("fortnight".into()),
+                description: None,
             })
             .unwrap_err();
         assert!(err.contains("fortnight"), "{err}");
