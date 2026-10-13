@@ -6,9 +6,14 @@ description.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["redb-store"]
+redb-store = ["sapphire-workspace/redb-store"]
+
 [dependencies]
 chrono.workspace = true
 grain-id = { workspace = true, features = ["schemars"] }
+sapphire-workspace.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
