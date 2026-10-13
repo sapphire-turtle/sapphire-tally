@@ -22,6 +22,12 @@ pub enum Error {
 
     #[error("`{0}` already exists")]
     AlreadyExists(String),
+
+    #[error(
+        "activity `{activity}` still has {stamps} stamp(s); delete them with it \
+         (with_stamps) or move them to another activity first"
+    )]
+    ActivityHasStamps { activity: String, stamps: usize },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

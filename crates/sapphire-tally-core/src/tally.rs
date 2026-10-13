@@ -66,6 +66,30 @@ impl Tally {
         Ok(activity)
     }
 
+    /// Delete an activity. One that still has stamps is refused with
+    /// [`Error::ActivityHasStamps`] unless `with_stamps` is set, which deletes
+    /// those stamps too. Returns the stamps deleted.
+    ///
+    /// Stamps that cannot be read are not counted: an unreadable file says
+    /// nothing about which activity it was for, and is left alone.
+    pub fn delete_activity(&self, id: GrainId, with_stamps: bool) -> Result<Vec<Stamp>> {
+        if !self.exists_activity(id) {
+            return Err(Error::ActivityNotFound(id.to_string()));
+        }
+        let stamps = self.list_stamps(Some(id), None, None)?;
+        if !stamps.is_empty() && !with_stamps {
+            return Err(Error::ActivityHasStamps {
+                activity: id.to_string(),
+                stamps: stamps.len(),
+            });
+        }
+        for stamp in &stamps {
+            store::remove(&store::stamp_path(&self.root, stamp.id))?;
+        }
+        store::remove(&store::activity_path(&self.root, id))?;
+        Ok(stamps)
+    }
+
     /// Every activity, by title (Unicode code point order). An unreadable
     /// file is skipped with a warning.
     pub fn list_activities(&self) -> Result<Vec<Activity>> {
@@ -125,6 +149,13 @@ impl Tally {
             stamp.comment = store::normalize_text(&comment);
         }
         store::replace_stamp(&self.root, &stamp)?;
+        Ok(stamp)
+    }
+
+    /// Delete a stamp, returning it as it was.
+    pub fn delete_stamp(&self, id: GrainId) -> Result<Stamp> {
+        let stamp = self.get_stamp(id)?;
+        store::remove(&store::stamp_path(&self.root, id))?;
         Ok(stamp)
     }
 
@@ -405,6 +436,46 @@ mod tests {
             t.get_stamp("zzzzzzz".parse().unwrap()).unwrap_err(),
             Error::StampNotFound(_)
         ));
+    }
+
+    #[test]
+    fn deleting_a_stamp_removes_its_file() {
+        let (dir, t) = tally();
+        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let s = t.add_stamp(a.id, None, None).unwrap();
+        assert_eq!(t.delete_stamp(s.id).unwrap(), s);
+        assert!(!store::stamp_path(dir.path(), s.id).exists());
+        assert!(matches!(
+            t.delete_stamp(s.id).unwrap_err(),
+            Error::StampNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn an_activity_with_stamps_is_deleted_only_with_them() {
+        let (dir, t) = tally();
+        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let other = t.create_activity("読書", None, None).unwrap();
+        t.add_stamp(a.id, None, None).unwrap();
+        t.add_stamp(a.id, None, None).unwrap();
+        let kept = t.add_stamp(other.id, None, None).unwrap();
+
+        let err = t.delete_activity(a.id, false).unwrap_err();
+        assert!(
+            matches!(err, Error::ActivityHasStamps { stamps: 2, .. }),
+            "{err}"
+        );
+        assert!(store::activity_path(dir.path(), a.id).exists());
+
+        assert_eq!(t.delete_activity(a.id, true).unwrap().len(), 2);
+        assert!(!store::activity_path(dir.path(), a.id).exists());
+        let left = t.list_stamps(None, None, None).unwrap();
+        assert_eq!(left, vec![kept]);
+
+        // An activity without stamps needs no flag.
+        assert!(t.delete_activity(other.id, false).is_err());
+        let empty = t.create_activity("空", None, None).unwrap();
+        assert!(t.delete_activity(empty.id, false).unwrap().is_empty());
     }
 
     #[test]

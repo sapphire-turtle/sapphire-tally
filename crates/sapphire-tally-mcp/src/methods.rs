@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use sapphire_framework::ipc::{RequestCtx, Router, RpcError};
-use sapphire_tally_core::{ActivityUpdate, StampUpdate, Tally, Unit};
+use sapphire_tally_core::{Activity, ActivityUpdate, StampUpdate, Tally, Unit};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Where a call finds its tally: asked once per call.
@@ -23,10 +23,12 @@ pub mod names {
     pub const ACTIVITY_ADD: &str = "sapphire-tally.activity_add";
     pub const ACTIVITY_GET: &str = "sapphire-tally.activity_get";
     pub const ACTIVITY_UPDATE: &str = "sapphire-tally.activity_update";
+    pub const ACTIVITY_DELETE: &str = "sapphire-tally.activity_delete";
     pub const ACTIVITY_LIST: &str = "sapphire-tally.activity_list";
     pub const STAMP_ADD: &str = "sapphire-tally.stamp_add";
     pub const STAMP_GET: &str = "sapphire-tally.stamp_get";
     pub const STAMP_UPDATE: &str = "sapphire-tally.stamp_update";
+    pub const STAMP_DELETE: &str = "sapphire-tally.stamp_delete";
     pub const STAMP_LIST: &str = "sapphire-tally.stamp_list";
     pub const HEATMAP: &str = "sapphire-tally.heatmap";
 }
@@ -61,6 +63,12 @@ pub fn register(router: Router, source: StateSource) -> Router {
     );
     let router = route(
         router,
+        names::ACTIVITY_DELETE,
+        &source,
+        TallyMethods::activity_delete,
+    );
+    let router = route(
+        router,
         names::ACTIVITY_LIST,
         &source,
         TallyMethods::activity_list,
@@ -72,6 +80,12 @@ pub fn register(router: Router, source: StateSource) -> Router {
         names::STAMP_UPDATE,
         &source,
         TallyMethods::stamp_update,
+    );
+    let router = route(
+        router,
+        names::STAMP_DELETE,
+        &source,
+        TallyMethods::stamp_delete,
     );
     let router = route(router, names::STAMP_LIST, &source, TallyMethods::stamp_list);
     route(router, names::HEATMAP, &source, TallyMethods::heatmap)
@@ -165,6 +179,25 @@ pub struct StampAddParams {
     pub comment: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ActivityDeleteParams {
+    /// The activity's grain-id.
+    pub id: String,
+    /// Also delete the activity's stamps. Without it, an activity that still
+    /// has stamps is not deleted.
+    #[serde(default)]
+    pub with_stamps: bool,
+}
+
+/// What `activity_delete` answers with.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActivityDeleted {
+    /// The activity as it was.
+    pub activity: Activity,
+    /// How many of its stamps went with it.
+    pub stamps_deleted: usize,
+}
+
 /// Omitted fields stay as they are.
 #[derive(Debug, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct StampUpdateParams {
@@ -231,6 +264,19 @@ impl TallyMethods {
         .map_err(|e| e.to_string())
     }
 
+    pub fn activity_delete(&self, p: ActivityDeleteParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let id = parse_id(&p.id)?;
+            let activity = self.tally.get_activity(id)?;
+            let stamps = self.tally.delete_activity(id, p.with_stamps)?;
+            Ok(serde_json::to_string_pretty(&ActivityDeleted {
+                activity,
+                stamps_deleted: stamps.len(),
+            })?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
     pub fn activity_list(&self, _: EmptyParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let list = self.tally.list_activities()?;
@@ -265,6 +311,14 @@ impl TallyMethods {
                 comment: p.comment,
             };
             let s = self.tally.update_stamp(parse_id(&p.id)?, update)?;
+            Ok(serde_json::to_string_pretty(&s)?)
+        })()
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn stamp_delete(&self, p: IdParams) -> Result<String, String> {
+        (|| -> anyhow::Result<String> {
+            let s = self.tally.delete_stamp(parse_id(&p.id)?)?;
             Ok(serde_json::to_string_pretty(&s)?)
         })()
         .map_err(|e| e.to_string())
@@ -433,6 +487,54 @@ mod tests {
             serde_json::from_str(&m.stamp_get(IdParams { id: stamp_id }).unwrap()).unwrap();
         assert!(got.get("comment").is_none(), "{got}");
         assert_eq!(got["timestamp"], "2026-09-05T09:12:00+09:00");
+    }
+
+    #[test]
+    fn delete_refuses_an_activity_with_stamps_unless_told() {
+        let (_dir, m) = methods();
+        let created = m
+            .activity_add(ActivityAddParams {
+                title: "筋トレ".into(),
+                unit: None,
+                description: None,
+            })
+            .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&created).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let stamp = m
+            .stamp_add(StampAddParams {
+                activity: id.clone(),
+                timestamp: None,
+                comment: None,
+            })
+            .unwrap();
+        let stamp_id = serde_json::from_str::<serde_json::Value>(&stamp).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let err = m
+            .activity_delete(ActivityDeleteParams {
+                id: id.clone(),
+                with_stamps: false,
+            })
+            .unwrap_err();
+        assert!(err.contains("with_stamps"), "{err}");
+
+        let deleted: ActivityDeleted = serde_json::from_str(
+            &m.activity_delete(ActivityDeleteParams {
+                id: id.clone(),
+                with_stamps: true,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(deleted.stamps_deleted, 1);
+        assert_eq!(deleted.activity.title, "筋トレ");
+        let err = m.stamp_delete(IdParams { id: stamp_id }).unwrap_err();
+        assert!(err.contains("not found"), "{err}");
     }
 
     #[test]
