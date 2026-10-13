@@ -1,6 +1,6 @@
-//! The Tally tab: the activities, a year of stamps as a heatmap, the stamps
-//! of the chosen day, and the windows that show, add and change a stamp or an
-//! activity.
+//! The Tally tab: every activity with a year of its stamps as a heatmap, one
+//! under the other, the stamps of a day picked in one of them, and the windows
+//! that show, add, change and delete a stamp or an activity.
 //!
 //! Everything comes from the running server's `sapphire-tally.*` methods
 //! ([`TallyClient`]), so the tab shows the workspace the server has selected.
@@ -16,7 +16,10 @@ use chrono::{Datelike as _, Days, Local, NaiveDate};
 use eframe::egui;
 use grain_id::GrainId;
 use sapphire_tally_core::{Activity, Stamp};
-use sapphire_tally_mcp::methods::{EmptyParams, QueryParams, StampAddParams, names};
+use sapphire_tally_mcp::methods::{
+    ActivityDeleteParams, ActivityDeleted, EmptyParams, IdParams, QueryParams, StampAddParams,
+    names,
+};
 
 use crate::client::TallyClient;
 use crate::form::{self, ActivityForm, StampForm};
@@ -25,9 +28,6 @@ use crate::heatmap::{self, Grid};
 /// How often the tab re-reads the data on its own, to pick up what the CLI,
 /// an agent or sync wrote.
 const REFRESH_EVERY: Duration = Duration::from_secs(10);
-
-/// How many stamps the list shows when no day is chosen.
-const RECENT: usize = 50;
 
 /// The heatmap's cell and the gap between cells, in points.
 const CELL: f32 = 12.0;
@@ -40,7 +40,7 @@ const LABEL_H: f32 = 16.0;
 enum Reply {
     /// One refresh: every activity, and the stamps in the grid's range.
     Data(Grid, Result<Data, String>),
-    /// A write went through; the text is the record the server wrote.
+    /// A write went through; the text is what the server answered with.
     Written(Sent, Result<String, String>),
 }
 
@@ -50,6 +50,8 @@ enum Sent {
     Activity,
     /// The one-click "Stamp now", which has no window to close.
     QuickStamp,
+    DeleteStamp,
+    DeleteActivity,
 }
 
 struct Data {
@@ -67,6 +69,12 @@ struct Window<F> {
     form: F,
 }
 
+/// A delete waiting for the person to confirm it.
+enum Confirm {
+    Stamp(GrainId),
+    Activity { id: GrainId, title: String },
+}
+
 pub struct TallyView {
     runtime: tokio::runtime::Handle,
     client: Arc<TallyClient>,
@@ -78,17 +86,17 @@ pub struct TallyView {
     load_error: Option<String>,
     loading: bool,
     last_refresh: Option<Instant>,
-    /// The days the heatmap covers, and the range the stamps were read for.
+    /// The days the heatmaps cover, and the range the stamps were read for.
     grid: Grid,
-    /// The activity the heatmap and list are for; `None` is all of them.
-    selected: Option<GrainId>,
-    /// The day whose stamps are listed; `None` lists the latest ones.
-    day: Option<NaiveDate>,
+    /// The day picked in one activity's heatmap: its stamps are listed under
+    /// that heatmap.
+    picked: Option<(GrainId, NaiveDate)>,
     /// The last write's confirmation, shown under the toolbar.
     notice: Option<String>,
 
     stamp_window: Option<Window<StampForm>>,
     activity_window: Option<Window<ActivityForm>>,
+    confirm: Option<Confirm>,
     /// A write is on its way to the server.
     sending: bool,
     /// Why the open window's form was not sent (or was refused).
@@ -111,11 +119,11 @@ impl TallyView {
             loading: false,
             last_refresh: None,
             grid: Grid::ending(today()),
-            selected: None,
-            day: None,
+            picked: None,
             notice: None,
             stamp_window: None,
             activity_window: None,
+            confirm: None,
             sending: false,
             form_error: None,
         }
@@ -134,17 +142,15 @@ impl TallyView {
         ui.ctx().request_repaint_after(REFRESH_EVERY);
 
         egui::Panel::top("tally_toolbar").show(ui, |ui| self.toolbar(ui));
-        egui::Panel::left("tally_activities")
-            .resizable(true)
-            .default_size(240.0)
-            .min_size(160.0)
-            .show(ui, |ui| self.activities(ui));
         egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| self.main(ui));
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| self.activities(ui));
         });
 
         self.stamp_window(ui.ctx());
         self.activity_window(ui.ctx());
+        self.confirm_window(ui.ctx());
     }
 
     // ── server calls ────────────────────────────────────────────────────────
@@ -229,6 +235,32 @@ impl TallyView {
         }
     }
 
+    /// Delete what the confirmation names. An activity goes with its stamps:
+    /// the confirmation said so.
+    fn send_delete(&mut self, confirm: &Confirm) {
+        let client = Arc::clone(&self.client);
+        self.start_sending();
+        match *confirm {
+            Confirm::Stamp(id) => {
+                let params = IdParams { id: id.to_string() };
+                self.spawn(async move {
+                    let result = client.call(names::STAMP_DELETE, params).await;
+                    Reply::Written(Sent::DeleteStamp, result)
+                });
+            }
+            Confirm::Activity { id, .. } => {
+                let params = ActivityDeleteParams {
+                    id: id.to_string(),
+                    with_stamps: true,
+                };
+                self.spawn(async move {
+                    let result = client.call(names::ACTIVITY_DELETE, params).await;
+                    Reply::Written(Sent::DeleteActivity, result)
+                });
+            }
+        }
+    }
+
     /// Stamp `activity` now, without a window.
     fn stamp_now(&mut self, activity: GrainId) {
         let client = Arc::clone(&self.client);
@@ -268,10 +300,10 @@ impl TallyView {
                 // A refresh for a range the view has moved away from.
                 Reply::Data(grid, _) if grid != self.grid => {}
                 Reply::Data(_, Ok(data)) => {
-                    if let Some(id) = self.selected
+                    if let Some((id, _)) = self.picked
                         && !data.activities.iter().any(|a| a.id == id)
                     {
-                        self.selected = None;
+                        self.picked = None;
                     }
                     self.data = Some(data);
                     self.load_error = None;
@@ -286,13 +318,27 @@ impl TallyView {
                 Reply::Written(sent, Ok(text)) => {
                     self.sending = false;
                     self.notice = Some(match sent {
-                        Sent::Stamp | Sent::QuickStamp => describe_stamp(&text, self.data.as_ref()),
+                        Sent::Stamp | Sent::QuickStamp => {
+                            format!("Saved {}.", describe_stamp(&text, self.data.as_ref()))
+                        }
                         Sent::Activity => describe_activity(&text),
+                        Sent::DeleteStamp => {
+                            format!("Deleted {}.", describe_stamp(&text, self.data.as_ref()))
+                        }
+                        Sent::DeleteActivity => describe_deleted_activity(&text),
                     });
                     match sent {
                         Sent::Stamp => self.stamp_window = None,
                         Sent::Activity => self.activity_window = None,
                         Sent::QuickStamp => {}
+                        Sent::DeleteStamp => {
+                            self.confirm = None;
+                            self.stamp_window = None;
+                        }
+                        Sent::DeleteActivity => {
+                            self.confirm = None;
+                            self.activity_window = None;
+                        }
                     }
                     self.refresh();
                 }
@@ -301,7 +347,7 @@ impl TallyView {
                     if sent == Sent::QuickStamp {
                         self.notice = Some(e);
                     } else {
-                        // The form stays open with what was typed.
+                        // The window stays open with what was typed.
                         self.form_error = Some(e);
                     }
                 }
@@ -314,14 +360,6 @@ impl TallyView {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let can_write = self.load_error.is_none() && self.data.is_some();
-            let has_activities = self.data.as_ref().is_some_and(|d| !d.activities.is_empty());
-            if ui
-                .add_enabled(can_write && has_activities, egui::Button::new("New stamp"))
-                .on_disabled_hover_text("Every stamp is for an activity: add one first")
-                .clicked()
-            {
-                self.open_new_stamp();
-            }
             if ui
                 .add_enabled(can_write, egui::Button::new("New activity"))
                 .clicked()
@@ -342,6 +380,11 @@ impl TallyView {
             if self.loading || self.sending {
                 ui.spinner();
             }
+            ui.separator();
+            self.range_bar(ui);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                legend(ui);
+            });
         });
         if let Some(e) = &self.load_error {
             ui.colored_label(ui.visuals().error_fg_color, e);
@@ -351,253 +394,146 @@ impl TallyView {
         }
     }
 
+    fn range_bar(&mut self, ui: &mut egui::Ui) {
+        let mut moved = None;
+        if ui.button("◀").on_hover_text("A year earlier").clicked() {
+            moved = Some(self.grid.end - Days::new(heatmap::WEEKS * 7));
+        }
+        let latest = self.grid.end >= today();
+        if ui
+            .add_enabled(!latest, egui::Button::new("▶"))
+            .on_hover_text("A year later")
+            .clicked()
+        {
+            moved = Some((self.grid.end + Days::new(heatmap::WEEKS * 7)).min(today()));
+        }
+        if ui
+            .add_enabled(!latest, egui::Button::new("Today"))
+            .clicked()
+        {
+            moved = Some(today());
+        }
+        ui.label(format!("{} – {}", self.grid.start, self.grid.end));
+        if let Some(end) = moved {
+            self.grid = Grid::ending(end);
+            self.picked = None;
+            self.refresh();
+        }
+    }
+
+    /// Every activity: its name and buttons, its heatmap, and the stamps of
+    /// the day picked in it.
     fn activities(&mut self, ui: &mut egui::Ui) {
         let Some(data) = &self.data else {
             ui.label("Loading…");
             return;
         };
-        let counts = per_activity(&data.stamps);
-        let mut open = None;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.selectable_value(&mut self.selected, None, "All activities");
-            if data.activities.is_empty() {
-                ui.add_space(8.0);
-                ui.label("No activities yet. Every stamp is for one: start with New activity.");
+        if data.activities.is_empty() {
+            ui.add_space(8.0);
+            ui.label("No activities yet. Every stamp is for one: start with New activity.");
+            return;
+        }
+        let activities = data.activities.clone();
+        for (i, activity) in activities.iter().enumerate() {
+            if i > 0 {
+                ui.separator();
             }
-            for activity in &data.activities {
-                let selected = self.selected == Some(activity.id);
-                let count = counts.get(&activity.id).copied().unwrap_or(0);
-                // Full width, the count at the right edge; a long title is
-                // cut short rather than drawn over the count.
-                let response = ui
-                    .add(
-                        egui::Button::selectable(selected, &activity.title)
-                            .shortcut_text(count.to_string())
-                            .truncate()
-                            .min_size(egui::vec2(ui.available_width(), 0.0)),
-                    )
-                    .on_hover_text(format!(
-                        "{count} stamps in the year shown. Double-click for details."
-                    ));
-                if response.clicked() {
-                    self.selected = Some(activity.id);
-                }
-                if response.double_clicked() {
-                    open = Some(activity.clone());
-                }
-            }
-        });
-        if let Some(activity) = open {
-            self.open_activity(&activity);
+            ui.push_id(activity.id.to_string(), |ui| self.activity(ui, activity));
         }
     }
 
-    fn main(&mut self, ui: &mut egui::Ui) {
+    fn activity(&mut self, ui: &mut egui::Ui, activity: &Activity) {
         let Some(data) = &self.data else {
             return;
         };
-        let activity = self
-            .selected
-            .and_then(|id| data.activities.iter().find(|a| a.id == id))
-            .cloned();
+        let counts = heatmap::day_counts(&data.stamps, Some(activity.id));
+        let total: u32 = counts.values().sum();
 
         ui.horizontal(|ui| {
-            ui.heading(
-                activity
-                    .as_ref()
-                    .map_or("All activities", |a| a.title.as_str()),
-            );
-            if let Some(activity) = &activity {
-                if ui
-                    .add_enabled(!self.sending, egui::Button::new("Stamp now"))
-                    .on_hover_text("Add a stamp for this activity at the current time")
-                    .clicked()
-                {
-                    self.stamp_now(activity.id);
-                }
-                if ui.button("Details").clicked() {
-                    self.open_activity(activity);
-                }
-            }
-        });
-        ui.add_space(4.0);
-        self.range_bar(ui);
-        ui.add_space(4.0);
-        self.heatmap(ui);
-        ui.add_space(12.0);
-        self.stamp_list(ui);
-    }
-
-    fn range_bar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            let mut moved = None;
-            if ui.button("◀").on_hover_text("A year earlier").clicked() {
-                moved = Some(self.grid.end - Days::new(heatmap::WEEKS * 7));
-            }
-            let latest = self.grid.end >= today();
             if ui
-                .add_enabled(!latest, egui::Button::new("▶"))
-                .on_hover_text("A year later")
+                .add(
+                    egui::Label::new(egui::RichText::new(&activity.title).heading())
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_text("Show its details")
                 .clicked()
             {
-                moved = Some((self.grid.end + Days::new(heatmap::WEEKS * 7)).min(today()));
+                self.open_activity(activity);
             }
+            let noun = if total == 1 { "stamp" } else { "stamps" };
+            ui.weak(format!("{total} {noun}"));
             if ui
-                .add_enabled(!latest, egui::Button::new("Today"))
+                .add_enabled(!self.sending, egui::Button::new("Stamp now"))
+                .on_hover_text("Add a stamp at the current time")
                 .clicked()
             {
-                moved = Some(today());
+                self.stamp_now(activity.id);
             }
-            ui.label(format!("{} – {}", self.grid.start, self.grid.end));
-            if let Some(end) = moved {
-                self.grid = Grid::ending(end);
-                self.day = None;
-                self.refresh();
-            }
-        });
-    }
-
-    fn heatmap(&mut self, ui: &mut egui::Ui) {
-        let Some(data) = &self.data else {
-            return;
-        };
-        let counts = heatmap::day_counts(&data.stamps, self.selected);
-        let max = counts.values().copied().max().unwrap_or(0);
-        let palette = palette(ui.visuals().dark_mode);
-        let grid = self.grid;
-        let step = CELL + GAP;
-        let size = egui::vec2(LABEL_W + heatmap::WEEKS as f32 * step, LABEL_H + 7.0 * step);
-        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
-        let painter = ui.painter_at(rect);
-        let origin = rect.min + egui::vec2(LABEL_W, LABEL_H);
-        let font = egui::FontId::proportional(10.0);
-        let text_color = ui.visuals().weak_text_color();
-
-        for (row, name) in [(0, "Mon"), (2, "Wed"), (4, "Fri")] {
-            painter.text(
-                egui::pos2(rect.min.x, origin.y + row as f32 * step + CELL / 2.0),
-                egui::Align2::LEFT_CENTER,
-                name,
-                font.clone(),
-                text_color,
-            );
-        }
-
-        let hovered = response.hover_pos();
-        let mut hovered_day = None;
-        for week in 0..heatmap::WEEKS {
-            let x = origin.x + week as f32 * step;
-            // A month's label goes over the column its first day is in.
-            if let Some(first) = (0..7)
-                .filter_map(|d| grid.day(week, d))
-                .find(|d| d.day() == 1)
+            if ui
+                .button("Stamp…")
+                .on_hover_text("Add a stamp with a time and a comment")
+                .clicked()
             {
-                painter.text(
-                    egui::pos2(x, rect.min.y),
-                    egui::Align2::LEFT_TOP,
-                    first.format("%b").to_string(),
-                    font.clone(),
-                    text_color,
-                );
+                self.open_new_stamp(activity.id);
             }
-            for weekday in 0..7 {
-                let Some(day) = grid.day(week, weekday) else {
-                    continue;
-                };
-                let cell = egui::Rect::from_min_size(
-                    egui::pos2(x, origin.y + weekday as f32 * step),
-                    egui::vec2(CELL, CELL),
-                );
-                let count = counts.get(&day).copied().unwrap_or(0);
-                let fill = palette[usize::from(heatmap::level(count, max))];
-                painter.rect_filled(cell, 2.0, fill);
-                let is_hovered = hovered.is_some_and(|p| cell.expand(GAP / 2.0).contains(p));
-                if self.day == Some(day) || is_hovered {
-                    painter.rect_stroke(
-                        cell,
-                        2.0,
-                        egui::Stroke::new(1.5, ui.visuals().strong_text_color()),
-                        egui::StrokeKind::Outside,
-                    );
-                }
-                if is_hovered {
-                    hovered_day = Some((day, count));
-                }
+            if ui.button("Details").clicked() {
+                self.open_activity(activity);
             }
-        }
-
-        if response.clicked()
-            && let Some((day, _)) = hovered_day
-        {
-            self.day = (self.day != Some(day)).then_some(day);
-        }
-        if let Some((day, count)) = hovered_day {
-            let noun = if count == 1 { "stamp" } else { "stamps" };
-            response.on_hover_text_at_pointer(format!("{count} {noun} on {day}"));
-        }
-
-        ui.horizontal(|ui| {
-            ui.weak("Less");
-            for fill in palette {
-                let (cell, _) =
-                    ui.allocate_exact_size(egui::vec2(CELL, CELL), egui::Sense::hover());
-                ui.painter().rect_filled(cell, 2.0, fill);
-            }
-            ui.weak("More");
         });
+
+        let picked_day = self
+            .picked
+            .filter(|(id, _)| *id == activity.id)
+            .map(|(_, day)| day);
+        if let Some(day) = heatmap_ui(ui, self.grid, &counts, picked_day) {
+            self.picked = (picked_day != Some(day)).then_some((activity.id, day));
+        }
+        if let Some(day) = picked_day {
+            self.day_stamps(ui, activity.id, day);
+        }
     }
 
-    fn stamp_list(&mut self, ui: &mut egui::Ui) {
+    fn day_stamps(&mut self, ui: &mut egui::Ui, activity: GrainId, day: NaiveDate) {
         let Some(data) = &self.data else {
             return;
         };
-        let titles: BTreeMap<GrainId, &str> = data
-            .activities
-            .iter()
-            .map(|a| (a.id, a.title.as_str()))
-            .collect();
         let mut stamps: Vec<&Stamp> = data
             .stamps
             .iter()
-            .filter(|s| self.selected.is_none_or(|a| a == s.activity))
-            .filter(|s| self.day.is_none_or(|d| d == s.timestamp.date_naive()))
+            .filter(|s| s.activity == activity && s.timestamp.date_naive() == day)
             .collect();
         stamps.reverse();
-        let heading = match self.day {
-            Some(day) => format!("Stamps on {day}"),
-            None => "Latest stamps".to_owned(),
-        };
 
         let mut open = None;
+        let mut close = false;
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.strong(heading);
-            if self.day.is_some() && ui.small_button("Show latest").clicked() {
-                self.day = None;
+            ui.strong(format!("Stamps on {day}"));
+            if ui.small_button("Close").clicked() {
+                close = true;
             }
         });
         if stamps.is_empty() {
             ui.weak("No stamps.");
-            return;
-        }
-        egui::Grid::new("tally_stamps")
-            .num_columns(3)
-            .striped(true)
-            .spacing([16.0, 4.0])
-            .show(ui, |ui| {
-                for stamp in stamps.into_iter().take(if self.day.is_some() {
-                    usize::MAX
-                } else {
-                    RECENT
-                }) {
-                    let when = stamp.timestamp.format(form::TIME_FORMAT).to_string();
-                    if ui.link(when).on_hover_text("Show this stamp").clicked() {
-                        open = Some(stamp.clone());
+        } else {
+            egui::Grid::new("day_stamps")
+                .num_columns(2)
+                .striped(true)
+                .spacing([16.0, 4.0])
+                .show(ui, |ui| {
+                    for stamp in stamps {
+                        let when = stamp.timestamp.format("%H:%M").to_string();
+                        if ui.link(when).on_hover_text("Show this stamp").clicked() {
+                            open = Some(stamp.clone());
+                        }
+                        ui.label(first_line(stamp.comment.as_deref().unwrap_or_default()));
+                        ui.end_row();
                     }
-                    ui.label(titles.get(&stamp.activity).copied().unwrap_or("(unknown)"));
-                    ui.label(first_line(stamp.comment.as_deref().unwrap_or_default()));
-                    ui.end_row();
-                }
-            });
+                });
+        }
+        if close {
+            self.picked = None;
+        }
         if let Some(stamp) = open {
             self.stamp_window = Some(Window {
                 id: Some(stamp.id),
@@ -610,16 +546,13 @@ impl TallyView {
 
     // ── windows ─────────────────────────────────────────────────────────────
 
-    fn open_new_stamp(&mut self) {
-        let activity = self.selected.or_else(|| {
-            self.data
-                .as_ref()
-                .and_then(|d| d.activities.first())
-                .map(|a| a.id)
-        });
-        let mut form = StampForm::new(activity, Local::now().fixed_offset());
-        // A stamp added while a past day is chosen is most likely for that day.
-        if let Some(day) = self.day.filter(|d| *d != today()) {
+    fn open_new_stamp(&mut self, activity: GrainId) {
+        let mut form = StampForm::new(Some(activity), Local::now().fixed_offset());
+        // A stamp added while a past day is picked is most likely for that day.
+        if let Some((id, day)) = self.picked
+            && id == activity
+            && day != today()
+        {
             form.when = format!("{day} 12:00");
         }
         self.stamp_window = Some(Window {
@@ -664,8 +597,7 @@ impl TallyView {
             Some(id) => format!("Stamp {id}"),
         };
         let mut open = true;
-        let mut submit = false;
-        let mut cancel_edit = false;
+        let mut action = Action::None;
         egui::Window::new(title)
             .id(egui::Id::new("tally_stamp_window"))
             .pivot(egui::Align2::CENTER_CENTER)
@@ -716,29 +648,40 @@ impl TallyView {
                 } else {
                     ui.label(&form.comment);
                 }
-                submit = window_buttons(
+                action = window_buttons(
                     ui,
-                    &mut window.editing,
+                    window.editing,
                     window.id.is_some(),
                     self.sending,
                     &self.form_error,
-                    &mut cancel_edit,
                 );
             });
-        if cancel_edit {
-            // Back to the record as stored.
-            if let Some(stamp) = window
-                .id
-                .and_then(|id| self.data.as_ref()?.stamps.iter().find(|s| s.id == id))
-            {
-                window.form = StampForm::edit(stamp);
+        match action {
+            Action::None => {}
+            Action::Edit => window.editing = true,
+            Action::Submit => {}
+            Action::CancelEdit => {
+                window.editing = false;
+                // Back to the record as stored.
+                if let Some(stamp) = window
+                    .id
+                    .and_then(|id| self.data.as_ref()?.stamps.iter().find(|s| s.id == id))
+                {
+                    window.form = StampForm::edit(stamp);
+                }
+                self.form_error = None;
             }
-            self.form_error = None;
+            Action::Delete => {
+                if let Some(id) = window.id {
+                    self.confirm = Some(Confirm::Stamp(id));
+                    self.form_error = None;
+                }
+            }
         }
         if !open {
             self.stamp_window = None;
             self.form_error = None;
-        } else if submit {
+        } else if action == Action::Submit {
             self.send_stamp();
         }
     }
@@ -752,8 +695,7 @@ impl TallyView {
             Some(_) => window.form.title.clone(),
         };
         let mut open = true;
-        let mut submit = false;
-        let mut cancel_edit = false;
+        let mut action = Action::None;
         egui::Window::new(title)
             .id(egui::Id::new("tally_activity_window"))
             .pivot(egui::Align2::CENTER_CENTER)
@@ -812,71 +754,237 @@ impl TallyView {
                 } else {
                     ui.label(&form.description);
                 }
-                submit = window_buttons(
+                action = window_buttons(
                     ui,
-                    &mut window.editing,
+                    window.editing,
                     window.id.is_some(),
                     self.sending,
                     &self.form_error,
-                    &mut cancel_edit,
                 );
             });
-        if cancel_edit {
-            if let Some(activity) = window
-                .id
-                .and_then(|id| self.data.as_ref()?.activities.iter().find(|a| a.id == id))
-            {
-                window.form = ActivityForm::edit(activity);
+        match action {
+            Action::None | Action::Submit => {}
+            Action::Edit => window.editing = true,
+            Action::CancelEdit => {
+                window.editing = false;
+                if let Some(activity) = window
+                    .id
+                    .and_then(|id| self.data.as_ref()?.activities.iter().find(|a| a.id == id))
+                {
+                    window.form = ActivityForm::edit(activity);
+                }
+                self.form_error = None;
             }
-            self.form_error = None;
+            Action::Delete => {
+                if let Some(id) = window.id {
+                    self.confirm = Some(Confirm::Activity {
+                        id,
+                        title: window.form.title.clone(),
+                    });
+                    self.form_error = None;
+                }
+            }
         }
         if !open {
             self.activity_window = None;
             self.form_error = None;
-        } else if submit {
+        } else if action == Action::Submit {
             self.send_activity();
+        }
+    }
+
+    /// Ask before deleting. Nothing else can be clicked meanwhile.
+    fn confirm_window(&mut self, ctx: &egui::Context) {
+        let Some(confirm) = self.confirm.take() else {
+            return;
+        };
+        let mut keep = true;
+        let mut delete = false;
+        egui::Modal::new(egui::Id::new("tally_confirm_delete")).show(ctx, |ui| {
+            ui.set_max_width(380.0);
+            match &confirm {
+                Confirm::Stamp(_) => {
+                    ui.heading("Delete this stamp?");
+                }
+                Confirm::Activity { title, .. } => {
+                    ui.heading(format!("Delete {title}?"));
+                    ui.label("All of its stamps are deleted with it, in every year.");
+                }
+            }
+            ui.label("This cannot be undone.");
+            if let Some(e) = &self.form_error {
+                ui.colored_label(ui.visuals().error_fg_color, e);
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let button = egui::Button::new(
+                    egui::RichText::new("Delete").color(ui.visuals().error_fg_color),
+                );
+                if ui.add_enabled(!self.sending, button).clicked() {
+                    delete = true;
+                }
+                if ui.button("Cancel").clicked() {
+                    keep = false;
+                }
+                if self.sending {
+                    ui.spinner();
+                }
+            });
+        });
+        if delete {
+            self.send_delete(&confirm);
+        }
+        if keep {
+            self.confirm = Some(confirm);
+        } else {
+            self.form_error = None;
         }
     }
 }
 
-/// The buttons under a record's window, and the form's error. Returns whether
-/// the form was submitted.
+/// What the buttons under a record's window asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Action {
+    None,
+    Edit,
+    Submit,
+    CancelEdit,
+    Delete,
+}
+
+/// The buttons under a record's window, and the form's error.
 ///
-/// Showing a record offers Edit; a form offers Save (Add for a new record)
-/// and, for an existing record, Cancel back to showing it.
+/// Showing a record offers Edit and Delete; a form offers Save (Add for a new
+/// record) and, for an existing record, Cancel back to showing it.
 fn window_buttons(
     ui: &mut egui::Ui,
-    editing: &mut bool,
+    editing: bool,
     exists: bool,
     sending: bool,
     error: &Option<String>,
-    cancel_edit: &mut bool,
-) -> bool {
-    let mut submit = false;
+) -> Action {
+    let mut action = Action::None;
     ui.separator();
     if let Some(e) = error {
         ui.colored_label(ui.visuals().error_fg_color, e);
     }
     ui.horizontal(|ui| {
-        if !*editing {
+        if !editing {
             if ui.button("Edit").clicked() {
-                *editing = true;
+                action = Action::Edit;
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let delete = egui::Button::new(
+                    egui::RichText::new("Delete").color(ui.visuals().error_fg_color),
+                );
+                if ui.add_enabled(!sending, delete).clicked() {
+                    action = Action::Delete;
+                }
+            });
             return;
         }
         let label = if exists { "Save" } else { "Add" };
         if ui.add_enabled(!sending, egui::Button::new(label)).clicked() {
-            submit = true;
+            action = Action::Submit;
         }
         if exists && ui.button("Cancel").clicked() {
-            *editing = false;
-            *cancel_edit = true;
+            action = Action::CancelEdit;
         }
         if sending {
             ui.spinner();
         }
     });
-    submit
+    action
+}
+
+/// One activity's heatmap: a column per week, shaded by each day's count
+/// against the activity's busiest day in view. Returns the day clicked.
+fn heatmap_ui(
+    ui: &mut egui::Ui,
+    grid: Grid,
+    counts: &BTreeMap<NaiveDate, u32>,
+    picked: Option<NaiveDate>,
+) -> Option<NaiveDate> {
+    let max = counts.values().copied().max().unwrap_or(0);
+    let palette = palette(ui.visuals().dark_mode);
+    let step = CELL + GAP;
+    let size = egui::vec2(LABEL_W + heatmap::WEEKS as f32 * step, LABEL_H + 7.0 * step);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+    let painter = ui.painter_at(rect);
+    let origin = rect.min + egui::vec2(LABEL_W, LABEL_H);
+    let font = egui::FontId::proportional(10.0);
+    let text_color = ui.visuals().weak_text_color();
+
+    for (row, name) in [(0, "Mon"), (2, "Wed"), (4, "Fri")] {
+        painter.text(
+            egui::pos2(rect.min.x, origin.y + row as f32 * step + CELL / 2.0),
+            egui::Align2::LEFT_CENTER,
+            name,
+            font.clone(),
+            text_color,
+        );
+    }
+
+    let hovered = response.hover_pos();
+    let mut hovered_day = None;
+    for week in 0..heatmap::WEEKS {
+        let x = origin.x + week as f32 * step;
+        // A month's label goes over the column its first day is in.
+        if let Some(first) = (0..7)
+            .filter_map(|d| grid.day(week, d))
+            .find(|d| d.day() == 1)
+        {
+            painter.text(
+                egui::pos2(x, rect.min.y),
+                egui::Align2::LEFT_TOP,
+                first.format("%b").to_string(),
+                font.clone(),
+                text_color,
+            );
+        }
+        for weekday in 0..7 {
+            let Some(day) = grid.day(week, weekday) else {
+                continue;
+            };
+            let cell = egui::Rect::from_min_size(
+                egui::pos2(x, origin.y + weekday as f32 * step),
+                egui::vec2(CELL, CELL),
+            );
+            let count = counts.get(&day).copied().unwrap_or(0);
+            let fill = palette[usize::from(heatmap::level(count, max))];
+            painter.rect_filled(cell, 2.0, fill);
+            let is_hovered = hovered.is_some_and(|p| cell.expand(GAP / 2.0).contains(p));
+            if picked == Some(day) || is_hovered {
+                painter.rect_stroke(
+                    cell,
+                    2.0,
+                    egui::Stroke::new(1.5, ui.visuals().strong_text_color()),
+                    egui::StrokeKind::Outside,
+                );
+            }
+            if is_hovered {
+                hovered_day = Some((day, count));
+            }
+        }
+    }
+
+    let clicked = response.clicked();
+    if let Some((day, count)) = hovered_day {
+        let noun = if count == 1 { "stamp" } else { "stamps" };
+        response.on_hover_text_at_pointer(format!("{count} {noun} on {day}"));
+    }
+    clicked.then_some(hovered_day.map(|(day, _)| day)).flatten()
+}
+
+/// "Less ■■■■■ More".
+fn legend(ui: &mut egui::Ui) {
+    // Laid out right to left: the last swatch first.
+    ui.weak("More");
+    for fill in palette(ui.visuals().dark_mode).into_iter().rev() {
+        let (cell, _) = ui.allocate_exact_size(egui::vec2(CELL, CELL), egui::Sense::hover());
+        ui.painter().rect_filled(cell, 2.0, fill);
+    }
+    ui.weak("Less");
 }
 
 /// GitHub's contribution greens, level 0 (no stamps) to [`heatmap::LEVELS`].
@@ -901,24 +1009,17 @@ fn palette(dark: bool) -> [egui::Color32; 5] {
     }
 }
 
-fn per_activity(stamps: &[Stamp]) -> BTreeMap<GrainId, usize> {
-    let mut counts = BTreeMap::new();
-    for stamp in stamps {
-        *counts.entry(stamp.activity).or_insert(0) += 1;
-    }
-    counts
-}
-
-/// "Stamped <activity> at <time>" from the stamp JSON the server wrote.
+/// "a stamp for <activity> at <time>" from the stamp JSON the server
+/// answered with.
 fn describe_stamp(text: &str, data: Option<&Data>) -> String {
     let Ok(stamp) = serde_json::from_str::<Stamp>(text) else {
-        return "Saved the stamp.".to_owned();
+        return "the stamp".to_owned();
     };
     let title = data
         .and_then(|d| d.activities.iter().find(|a| a.id == stamp.activity))
         .map_or_else(|| stamp.activity.to_string(), |a| a.title.clone());
     format!(
-        "Saved a stamp for {title} at {}.",
+        "a stamp for {title} at {}",
         stamp.timestamp.format(form::TIME_FORMAT)
     )
 }
@@ -927,6 +1028,23 @@ fn describe_activity(text: &str) -> String {
     match serde_json::from_str::<Activity>(text) {
         Ok(activity) => format!("Saved {}.", activity.title),
         Err(_) => "Saved the activity.".to_owned(),
+    }
+}
+
+fn describe_deleted_activity(text: &str) -> String {
+    match serde_json::from_str::<ActivityDeleted>(text) {
+        Ok(deleted) => {
+            let noun = if deleted.stamps_deleted == 1 {
+                "stamp"
+            } else {
+                "stamps"
+            };
+            format!(
+                "Deleted {} and its {} {noun}.",
+                deleted.activity.title, deleted.stamps_deleted
+            )
+        }
+        Err(_) => "Deleted the activity.".to_owned(),
     }
 }
 
@@ -943,7 +1061,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_saved_stamp_is_described_by_its_activity() {
+    fn a_stamp_is_described_by_its_activity() {
         let activity = Activity {
             id: "012atvw".parse().unwrap(),
             title: "筋トレ".into(),
@@ -958,8 +1076,17 @@ mod tests {
             r#"{"id":"012atvx","activity":"012atvw","timestamp":"2026-09-05T09:12:00+09:00"}"#;
         assert_eq!(
             describe_stamp(text, Some(&data)),
-            "Saved a stamp for 筋トレ at 2026-09-05 09:12."
+            "a stamp for 筋トレ at 2026-09-05 09:12"
         );
-        assert_eq!(describe_stamp("not json", None), "Saved the stamp.");
+        assert_eq!(describe_stamp("not json", None), "the stamp");
+    }
+
+    #[test]
+    fn a_deleted_activity_says_how_many_stamps_went() {
+        let text = r#"{"activity":{"id":"012atvw","title":"筋トレ"},"stamps_deleted":3}"#;
+        assert_eq!(
+            describe_deleted_activity(text),
+            "Deleted 筋トレ and its 3 stamps."
+        );
     }
 }
