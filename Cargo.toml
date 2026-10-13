@@ -3,6 +3,7 @@ members = [
     "cli",
     "crates/sapphire-tally-core",
     "crates/sapphire-tally-mcp",
+    "desktop",
 ]
 default-members = ["cli"]
 resolver = "3"
