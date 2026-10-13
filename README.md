@@ -36,4 +36,4 @@ Bought it in Yokohama.
 
 ## MCP tools
 
-`activity_add` / `activity_get` / `activity_update` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_list` / `heatmap`, plus the framework's read-only tools (`status`, `workspace_show`, `workspace_search`, `workspace_read_file`, `workspace_list_dir`, `workgroup_show`, `device_list`)
+`activity_add` / `activity_get` / `activity_update` / `activity_delete` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_delete` / `stamp_list` / `heatmap`, plus the framework's read-only tools (`status`, `workspace_show`, `workspace_search`, `workspace_read_file`, `workspace_list_dir`, `workgroup_show`, `device_list`)

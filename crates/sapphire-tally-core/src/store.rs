@@ -108,6 +108,12 @@ pub fn replace_stamp(root: &Path, s: &Stamp) -> Result<()> {
     Ok(())
 }
 
+/// Remove a record's file.
+pub fn remove(path: &Path) -> Result<()> {
+    std::fs::remove_file(path)?;
+    Ok(())
+}
+
 fn activity_text(a: &Activity) -> Result<String> {
     let front = ActivityFront {
         id: a.id,

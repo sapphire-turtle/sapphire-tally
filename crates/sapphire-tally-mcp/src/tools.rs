@@ -18,8 +18,8 @@ use sapphire_framework::mcp::{self, McpService, ToolContext};
 use serde::Serialize;
 
 use crate::methods::{
-    ActivityAddParams, ActivityUpdateParams, EmptyParams, IdParams, QueryParams, StampAddParams,
-    StampUpdateParams, names,
+    ActivityAddParams, ActivityDeleteParams, ActivityUpdateParams, EmptyParams, IdParams,
+    QueryParams, StampAddParams, StampUpdateParams, names,
 };
 
 /// How the tally answers MCP: [`TallyTools`], one per session.
@@ -100,6 +100,19 @@ impl TallyTools {
     }
 
     #[tool(
+        description = "Delete an activity. One that still has stamps is refused unless \
+        `with_stamps` is true, which deletes those stamps too. Returns the deleted activity \
+        and how many stamps went with it.",
+        annotations(destructive_hint = true)
+    )]
+    pub async fn activity_delete(
+        &self,
+        Parameters(p): Parameters<ActivityDeleteParams>,
+    ) -> Result<String, String> {
+        self.call(names::ACTIVITY_DELETE, p).await
+    }
+
+    #[tool(
         description = "List all activities as a JSON array, each with id, title, unit and \
         description.",
         annotations(read_only_hint = true)
@@ -140,6 +153,17 @@ impl TallyTools {
         Parameters(p): Parameters<StampUpdateParams>,
     ) -> Result<String, String> {
         self.call(names::STAMP_UPDATE, p).await
+    }
+
+    #[tool(
+        description = "Delete one stamp by grain-id. Returns the stamp as it was.",
+        annotations(destructive_hint = true)
+    )]
+    pub async fn stamp_delete(
+        &self,
+        Parameters(p): Parameters<IdParams>,
+    ) -> Result<String, String> {
+        self.call(names::STAMP_DELETE, p).await
     }
 
     #[tool(
@@ -205,7 +229,7 @@ mod tests {
         }
     }
 
-    /// The tally's nine, the framework's read-only seven, and none of the
+    /// The tally's eleven, the framework's read-only seven, and none of the
     /// framework's raw file writes.
     #[test]
     fn the_tally_serves_its_tools_and_the_frameworks_read_only_ones() {
@@ -229,6 +253,6 @@ mod tests {
                 || n == "workspace_delete_file"),
             "raw writes would bypass the tally's checks: {names:?}"
         );
-        assert_eq!(names.len(), 9 + 7, "{names:?}");
+        assert_eq!(names.len(), 11 + 7, "{names:?}");
     }
 }
