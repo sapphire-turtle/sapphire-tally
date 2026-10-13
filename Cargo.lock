@@ -4064,8 +4064,9 @@ dependencies = [
 
 [[package]]
 name = "sapphire-framework-gui"
-version = "0.17.0"
-source = "git+https://github.com/sapphire-turtle/sapphire-framework?branch=feat%2Fworkspace-sync-option#2e369dd93f7ef56bec97ba444095e036e2b7d3bd"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baba42f4addf053684de9dc995cc71d52631b6cb0ae6c9da436833c251f016f4"
 dependencies = [
  "egui",
  "fontdb",
