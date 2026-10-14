@@ -29,7 +29,6 @@ redb-store = [
 sapphire-tally-core = { path = "../crates/sapphire-tally-core", version = "0.1.0", default-features = false }
 sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.0", default-features = false }
 sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
-sapphire-bridge-client.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time"] }
