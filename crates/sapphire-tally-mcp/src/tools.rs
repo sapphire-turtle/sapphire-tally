@@ -17,7 +17,10 @@ use sapphire_framework::ipc;
 use sapphire_framework::mcp::{self, McpService, ToolContext};
 use serde::Serialize;
 
-use crate::methods::{ActivityAddParams, EmptyParams, QueryParams, StampAddParams, names};
+use crate::methods::{
+    ActivityAddParams, ActivityDeleteParams, ActivityUpdateParams, EmptyParams, IdParams,
+    QueryParams, StampAddParams, StampUpdateParams, names,
+};
 
 /// How the tally answers MCP: [`TallyTools`], one per session.
 pub fn service() -> McpService {
@@ -64,8 +67,8 @@ impl TallyTools {
 impl TallyTools {
     #[tool(
         description = "Create a new activity (tracker). `unit` is an optional display \
-        granularity: day/week/month (default day). Returns the created activity JSON \
-        including its id."
+        granularity: day/week/month (default day). `description` is optional Markdown. \
+        Returns the created activity JSON including its id."
     )]
     pub async fn activity_add(
         &self,
@@ -75,7 +78,43 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "List all activities as a JSON array, each with id, title, and unit.",
+        description = "Show one activity by grain-id: its title, unit and description.",
+        annotations(read_only_hint = true)
+    )]
+    pub async fn activity_get(
+        &self,
+        Parameters(p): Parameters<IdParams>,
+    ) -> Result<String, String> {
+        self.call(names::ACTIVITY_GET, p).await
+    }
+
+    #[tool(
+        description = "Change an activity's title, unit or description. Omitted fields stay \
+        as they are; an empty description removes it. Returns the updated activity JSON."
+    )]
+    pub async fn activity_update(
+        &self,
+        Parameters(p): Parameters<ActivityUpdateParams>,
+    ) -> Result<String, String> {
+        self.call(names::ACTIVITY_UPDATE, p).await
+    }
+
+    #[tool(
+        description = "Delete an activity. One that still has stamps is refused unless \
+        `with_stamps` is true, which deletes those stamps too. Returns the deleted activity \
+        and how many stamps went with it.",
+        annotations(destructive_hint = true)
+    )]
+    pub async fn activity_delete(
+        &self,
+        Parameters(p): Parameters<ActivityDeleteParams>,
+    ) -> Result<String, String> {
+        self.call(names::ACTIVITY_DELETE, p).await
+    }
+
+    #[tool(
+        description = "List all activities as a JSON array, each with id, title, unit and \
+        description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_list(
@@ -88,13 +127,43 @@ impl TallyTools {
     #[tool(
         description = "Add a stamp. `activity` is the activity's grain-id. `timestamp` is \
         optional ISO 8601 with timezone (server time is used when omitted). `comment` is an \
-        optional one-line note."
+        optional Markdown note."
     )]
     pub async fn stamp_add(
         &self,
         Parameters(p): Parameters<StampAddParams>,
     ) -> Result<String, String> {
         self.call(names::STAMP_ADD, p).await
+    }
+
+    #[tool(
+        description = "Show one stamp by grain-id: its activity, timestamp and comment.",
+        annotations(read_only_hint = true)
+    )]
+    pub async fn stamp_get(&self, Parameters(p): Parameters<IdParams>) -> Result<String, String> {
+        self.call(names::STAMP_GET, p).await
+    }
+
+    #[tool(
+        description = "Change a stamp's activity, timestamp or comment. Omitted fields stay \
+        as they are; an empty comment removes it. Returns the updated stamp JSON."
+    )]
+    pub async fn stamp_update(
+        &self,
+        Parameters(p): Parameters<StampUpdateParams>,
+    ) -> Result<String, String> {
+        self.call(names::STAMP_UPDATE, p).await
+    }
+
+    #[tool(
+        description = "Delete one stamp by grain-id. Returns the stamp as it was.",
+        annotations(destructive_hint = true)
+    )]
+    pub async fn stamp_delete(
+        &self,
+        Parameters(p): Parameters<IdParams>,
+    ) -> Result<String, String> {
+        self.call(names::STAMP_DELETE, p).await
     }
 
     #[tool(
@@ -126,8 +195,8 @@ impl ServerHandler for TallyTools {
         let info = mcp::server_info(&self.ctx);
         let framework = info.instructions.clone().unwrap_or_default();
         info.with_instructions(format!(
-            "Sapphire Tally records stamps (activity + timestamp + optional one-line \
-             comment) into plain-text TOML files and aggregates them into GitHub-style \
+            "Sapphire Tally records stamps (activity + timestamp + optional Markdown \
+             comment) as Markdown files and aggregates them into GitHub-style \
              heatmap buckets. Use activity_list to find an activity's id, stamp_add to \
              record one, and heatmap to see how often it happened.\n\n{framework}"
         ))
@@ -160,7 +229,7 @@ mod tests {
         }
     }
 
-    /// The tally's five, the framework's read-only seven, and none of the
+    /// The tally's eleven, the framework's read-only seven, and none of the
     /// framework's raw file writes.
     #[test]
     fn the_tally_serves_its_tools_and_the_frameworks_read_only_ones() {
@@ -184,6 +253,6 @@ mod tests {
                 || n == "workspace_delete_file"),
             "raw writes would bypass the tally's checks: {names:?}"
         );
-        assert_eq!(names.len(), 5 + 7, "{names:?}");
+        assert_eq!(names.len(), 11 + 7, "{names:?}");
     }
 }

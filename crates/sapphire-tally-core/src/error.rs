@@ -8,14 +8,26 @@ pub enum Error {
     #[error("failed to parse {path}: {message}")]
     Parse { path: String, message: String },
 
+    #[error("failed to write a record: {0}")]
+    Render(String),
+
     #[error("invalid grain-id `{0}`")]
     InvalidId(String),
 
     #[error("activity `{0}` not found")]
     ActivityNotFound(String),
 
+    #[error("stamp `{0}` not found")]
+    StampNotFound(String),
+
     #[error("`{0}` already exists")]
     AlreadyExists(String),
+
+    #[error(
+        "activity `{activity}` still has {stamps} stamp(s); delete them with it \
+         (with_stamps) or move them to another activity first"
+    )]
+    ActivityHasStamps { activity: String, stamps: usize },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

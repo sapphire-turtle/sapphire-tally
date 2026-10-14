@@ -2,7 +2,7 @@
 
 > Language: **English** | [日本語](README.ja.md)
 
-A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https://github.com/fluo10/sapphire-framework) — file-based, local-first, made for human-agent collaboration. Stamps are an activity + timestamp + optional one-line comment, each stored as one plain TOML file.
+A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https://github.com/fluo10/sapphire-framework) — file-based, local-first, made for human-agent collaboration. Stamps are an activity + timestamp + optional comment, each stored as one Markdown file with YAML front matter.
 
 **Under development.** One binary, `sapphire-tally`, runs the app server and carries the framework's verbs (`workspace`, `workgroup`, `mcp`, …).
 
@@ -20,10 +20,20 @@ Sync goes through the host's `sapphire-bridge`; without one running, the server 
 
 ## Data format
 
-- `<workspace>/activities/<grain-id>.toml` — an activity (`title` required, `unit` optional: day/week/month)
-- `<workspace>/stamps/<grain-id>.toml` — a stamp (`activity`/`timestamp` required, `comment` optional)
+- `<workspace>/activities/<grain-id>.md` — an activity: `title` (required) and `unit` (optional: day/week/month) in front matter, the description as the body
+- `<workspace>/stamps/<grain-id>.md` — a stamp: `activity` and `timestamp` in front matter, the comment as the body
 - Filenames are grain-ids (7-char BASE32). Each file also carries an `id` field, but the filename is authoritative.
+
+```markdown
+---
+id: 012atvx
+activity: 012atvw
+timestamp: "2026-09-05T09:12:00+09:00"
+---
+
+Bought it in Yokohama.
+```
 
 ## MCP tools
 
-`activity_add` / `activity_list` / `stamp_add` / `stamp_list` / `heatmap`, plus the framework's read-only tools (`status`, `workspace_show`, `workspace_search`, `workspace_read_file`, `workspace_list_dir`, `workgroup_show`, `device_list`)
+`activity_add` / `activity_get` / `activity_update` / `activity_delete` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_delete` / `stamp_list` / `heatmap`, plus the framework's read-only tools (`status`, `workspace_show`, `workspace_search`, `workspace_read_file`, `workspace_list_dir`, `workgroup_show`, `device_list`)
