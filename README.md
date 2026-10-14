@@ -37,3 +37,13 @@ Bought it in Yokohama.
 ## MCP tools
 
 `activity_add` / `activity_get` / `activity_update` / `activity_delete` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_delete` / `stamp_list` / `heatmap`, plus the framework's read-only tools (`status`, `workspace_show`, `workspace_search`, `workspace_read_file`, `workspace_list_dir`, `workgroup_show`, `device_list`)
+
+## License
+
+| Component | License |
+|-----------|---------|
+| `sapphire-tally` (`cli/`) | MIT OR Apache-2.0 |
+| `sapphire-tally-core` | MIT OR Apache-2.0 |
+| `sapphire-tally-mcp` | MIT OR Apache-2.0 |
+
+The desktop and mobile apps, when they land, are GPL-3.0-or-later with an app store exception, like every sapphire application's. See the `LICENSE-MIT` / `LICENSE-APACHE` files in each component's directory for the full license text.

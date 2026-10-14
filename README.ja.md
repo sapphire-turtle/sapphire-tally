@@ -37,3 +37,13 @@ timestamp: "2026-09-05T09:12:00+09:00"
 ## MCPツール
 
 `activity_add` / `activity_get` / `activity_update` / `activity_delete` / `activity_list` / `stamp_add` / `stamp_get` / `stamp_update` / `stamp_delete` / `stamp_list` / `heatmap` と、frameworkの読み取り専用ツール（`status`・`workspace_show`・`workspace_search`・`workspace_read_file`・`workspace_list_dir`・`workgroup_show`・`device_list`）
+
+## ライセンス
+
+| コンポーネント | ライセンス |
+|-----------|---------|
+| `sapphire-tally`（`cli/`） | MIT OR Apache-2.0 |
+| `sapphire-tally-core` | MIT OR Apache-2.0 |
+| `sapphire-tally-mcp` | MIT OR Apache-2.0 |
+
+デスクトップ版・モバイル版は、ほかの sapphire アプリと同じく GPL-3.0-or-later（App Storeマーケットプレイス例外付き）になります。各コンポーネントのディレクトリにある`LICENSE-MIT` / `LICENSE-APACHE`ファイルに完全なライセンス文書があります。
