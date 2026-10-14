@@ -9,7 +9,7 @@ A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https:/
 ## Usage
 
 ```sh
-sapphire-tally                               # run the server (same as `sapphire-tally serve`)
+sapphire-tally serve                         # run the server (a bare `sapphire-tally` prints the help)
 sapphire-tally workspace init ~/tally --sync # create a workspace, serve it, and sync it
 sapphire-tally workspace select ~/tally      # switch the server to an existing workspace
 sapphire-tally workspace sync enable         # turn sync on or off later (also: disable, status)
