@@ -5,19 +5,19 @@ pub use sapphire_framework::server::FrameworkCommand;
 /// The command line of the one binary this app ships.
 ///
 /// The framework's verbs sit at the top level, where the tally's own verbs
-/// will join them. A bare invocation parses to `command: None`, which is the
-/// framework's default verb, `serve` — what the service manager starts.
+/// will join them. A bare invocation prints the help; the service manager starts the
+/// binary with `serve`.
 #[derive(Parser)]
 #[command(
     name = "sapphire-tally",
+    arg_required_else_help = true,
     about = "Stamp tracker with GitHub-style heatmaps",
     long_about = None,
     version
 )]
 pub struct Cli {
-    /// Omit to run the server.
     #[command(subcommand)]
-    pub command: Option<Command>,
+    pub command: Command,
 }
 
 #[derive(Subcommand)]
