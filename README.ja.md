@@ -9,7 +9,7 @@ sapphire-framework上に構築された、GitHub草風ヒートマップ付き�
 ## 使い方
 
 ```sh
-sapphire-tally                               # サーバーを起動（`sapphire-tally serve` と同じ）
+sapphire-tally serve                         # サーバーを起動（引数なしの `sapphire-tally` はヘルプを表示）
 sapphire-tally workspace init ~/tally --sync # ワークスペースを作成し、提供・同期を開始
 sapphire-tally workspace select ~/tally      # 既存のワークスペースに切り替え
 sapphire-tally workspace sync enable         # 後から同期を切り替え（disable / status も）
