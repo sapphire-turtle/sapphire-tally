@@ -8,14 +8,14 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        // A bare invocation *is* `serve`: what the service manager starts.
-        None | Some(Command::Framework(FrameworkCommand::Serve)) => {
+        // What the service manager starts.
+        Command::Framework(FrameworkCommand::Serve) => {
             sapphire_tally_core::init_app_context(AppKind::Server);
             runtime()?.block_on(serve::run())
         }
         // `mcp` among them: its stdout is the MCP stream, and the
         // framework's console log goes to stderr (sapphire-framework#232).
-        Some(Command::Framework(command)) => {
+        Command::Framework(command) => {
             sapphire_tally_core::init_app_context(AppKind::Cli);
             let code =
                 runtime()?.block_on(command.dispatch(serve::build_oneshot(), serve::VERSION))?;
