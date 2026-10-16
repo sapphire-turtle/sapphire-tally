@@ -13,8 +13,8 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use chrono::{Datelike as _, Days, Local, NaiveDate};
-use eframe::egui;
 use grain_id::GrainId;
+use sapphire_framework::gui::egui;
 use sapphire_tally_core::{Activity, Stamp};
 use sapphire_tally_mcp::methods::{
     ActivityDeleteParams, ActivityDeleted, EmptyParams, IdParams, QueryParams, StampAddParams,
