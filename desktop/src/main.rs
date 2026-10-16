@@ -1,12 +1,12 @@
-//! sapphire-tally's desktop app: the heatmap and its stamps, and the
-//! framework's Settings.
+//! sapphire-tally's desktop app: the heatmap and its stamps on the
+//! framework's shell, with its Settings.
 //!
 //! A pure client, like sapphire-ledger's: it talks to the service-managed
 //! `sapphire-tally serve` and `sapphire-bridge` over IPC and never starts
-//! either itself. The Tally tab calls the server's `sapphire-tally.*`
-//! methods, so it shows the workspace the server has selected; the Sync tab
-//! picks that workspace and manages the workgroup. Closing the window stops
-//! nothing.
+//! either itself. The Tally screen calls the server's `sapphire-tally.*`
+//! methods, so it shows the workspace the server has selected; Settings, at
+//! the rail's foot, picks that workspace and manages the workgroup. Closing
+//! the window stops nothing.
 
 mod client;
 mod form;
@@ -15,7 +15,7 @@ mod tally;
 
 use sapphire_framework::gui::app::{AppOptions, AppSetup};
 use sapphire_framework::gui::client::AppIdentity;
-use sapphire_framework::gui::{Settings, eframe, egui};
+use sapphire_framework::gui::{Destination, Settings, Shell, eframe, egui};
 
 use crate::client::TallyClient;
 use crate::tally::TallyView;
@@ -25,29 +25,24 @@ const APP: AppIdentity = AppIdentity {
     version: env!("CARGO_PKG_VERSION"),
 };
 
+/// The app's own screens, on the framework's rail.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
+enum Screen {
     Tally,
-    Sync,
 }
 
 struct App {
-    tab: Tab,
+    shell: Shell<Screen>,
     tally: TallyView,
-    sync: Settings,
 }
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::top("tabs").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tab, Tab::Tally, "Tally");
-                ui.selectable_value(&mut self.tab, Tab::Sync, "Sync");
-            });
-        });
-        egui::CentralPanel::default().show(ui, |ui| match self.tab {
-            Tab::Tally => self.tally.ui(ui),
-            Tab::Sync => self.sync.ui(ui),
+        let tally = &mut self.tally;
+        self.shell.ui(ui, |ui, screen| match screen {
+            Screen::Tally => {
+                egui::CentralPanel::default().show(ui, |ui| tally.ui(ui));
+            }
         });
     }
 }
@@ -59,10 +54,17 @@ fn main() -> eframe::Result<()> {
             .min_inner_size([720.0, 440.0]),
         |setup: AppSetup<'_>| {
             let tally_client = TallyClient::new(APP.app_name, APP.version, setup.endpoints.app);
+            let shell = Shell::new(
+                vec![Destination::new(
+                    Screen::Tally,
+                    egui::include_image!("../assets/icons/calendar-check.svg"),
+                    "Tally",
+                )],
+                Settings::new(setup.framework),
+            );
             Box::new(App {
-                tab: Tab::Tally,
+                shell,
                 tally: TallyView::new(setup.runtime, tally_client, setup.repaint),
-                sync: Settings::new(setup.framework),
             })
         },
     )
