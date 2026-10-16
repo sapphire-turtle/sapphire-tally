@@ -9,7 +9,7 @@ A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https:/
 ## Usage
 
 ```sh
-sapphire-tally                               # run the server (same as `sapphire-tally serve`)
+sapphire-tally serve                         # run the server (a bare `sapphire-tally` prints the help)
 sapphire-tally workspace init ~/tally --sync # create a workspace, serve it, and sync it
 sapphire-tally workspace select ~/tally      # switch the server to an existing workspace
 sapphire-tally workspace sync enable         # turn sync on or off later (also: disable, status)
@@ -17,6 +17,14 @@ sapphire-tally mcp                           # MCP over stdio, for an agent to l
 ```
 
 Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[mcp] http = true` in the app's `server.toml`.
+
+## Desktop app
+
+`sapphire-tally-desktop` lists every activity with a year of its stamps as a GitHub-style heatmap — darker days have more stamps. Click a day to list its stamps, and a stamp to see, edit or delete it; **Stamp now**, **Stamp…**, **New activity** and **Details** add, change and delete records (deleting an activity deletes its stamps, after a confirmation). The Sync tab picks the server's workspace and manages the workgroup. Like the CLI, it talks to the running `sapphire-tally` server and never starts one.
+
+```sh
+cargo run -p sapphire-tally-desktop
+```
 
 ## Data format
 

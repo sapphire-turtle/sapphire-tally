@@ -9,7 +9,7 @@ sapphire-framework上に構築された、GitHub草風ヒートマップ付き�
 ## 使い方
 
 ```sh
-sapphire-tally                               # サーバーを起動（`sapphire-tally serve` と同じ）
+sapphire-tally serve                         # サーバーを起動（引数なしの `sapphire-tally` はヘルプを表示）
 sapphire-tally workspace init ~/tally --sync # ワークスペースを作成し、提供・同期を開始
 sapphire-tally workspace select ~/tally      # 既存のワークスペースに切り替え
 sapphire-tally workspace sync enable         # 後から同期を切り替え（disable / status も）
@@ -17,6 +17,14 @@ sapphire-tally mcp                           # stdio経由のMCP（エージェ�
 ```
 
 同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `server.toml` で `[mcp] http = true` を設定すると有効になります。
+
+## デスクトップアプリ
+
+`sapphire-tally-desktop` は、すべての種目を、それぞれの1年分のスタンプをGitHubの草のようなヒートマップ付きで一覧表示します（スタンプが多い日ほど濃い色）。日をクリックするとその日のスタンプ一覧、スタンプをクリックすると詳細表示・編集・削除ができます。**Stamp now**・**Stamp…**・**New activity**・**Details** で記録の追加・変更・削除ができます（種目を削除すると、確認のうえでそのスタンプもすべて削除されます）。Syncタブではサーバーのワークスペース選択とワークグループの管理ができます。CLIと同じく、動作中の `sapphire-tally` サーバーと通信し、自分でサーバーを起動することはありません。
+
+```sh
+cargo run -p sapphire-tally-desktop
+```
 
 ## データ形式
 
