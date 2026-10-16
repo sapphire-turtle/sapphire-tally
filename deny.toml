@@ -21,6 +21,8 @@ yanked = "warn"
 # Every ignore needs a `reason`, so the next contributor can tell whether it is
 # still load-bearing. Re-check them when the dependency they name moves.
 ignore = [
+    # Unmaintained, with no vulnerability and no safe upgrade.
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained (author-declared); reached through sapphire-framework-gui (desktop) and egui's text stack. The suggested alternative (skrifa) is a different font stack." },
 ]
 
 [licenses]
