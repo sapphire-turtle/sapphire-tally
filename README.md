@@ -4,6 +4,8 @@
 
 A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https://github.com/fluo10/sapphire-framework) — file-based, local-first, made for human-agent collaboration. Stamps are an activity + timestamp + optional comment, each stored as one Markdown file with YAML front matter.
 
+> **Works with any MCP client.** AI integration is a standard MCP server, so sapphire-tally is not tied to [sapphire-agent](https://github.com/sapphire-turtle/sapphire-agent) despite the shared name — any AI harness that can act as an MCP client (Claude Code, Claude Desktop, …) can use it.
+
 **Under development.** One binary, `sapphire-tally`, runs the app server and carries the framework's verbs (`workspace`, `workgroup`, `mcp`, …).
 
 ## Usage
