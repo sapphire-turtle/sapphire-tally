@@ -55,5 +55,6 @@ Bought it in Yokohama.
 | `sapphire-tally` (`cli/`) | MIT OR Apache-2.0 |
 | `sapphire-tally-core` | MIT OR Apache-2.0 |
 | `sapphire-tally-mcp` | MIT OR Apache-2.0 |
+| `sapphire-tally-desktop` | GPL-3.0-or-later, with [App Store marketplace exception](desktop/LICENSE.App-Store-Exception) |
 
-The desktop and mobile apps, when they land, are GPL-3.0-or-later with an app store exception, like every sapphire application's. See the `LICENSE-MIT` / `LICENSE-APACHE` files in each component's directory for the full license text.
+The mobile app, when it lands, is GPL-3.0-or-later with an app store exception too, like every sapphire application's. See the `LICENSE` (or `LICENSE-MIT` / `LICENSE-APACHE`) file in each component's directory for the full license text.

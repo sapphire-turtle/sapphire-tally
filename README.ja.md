@@ -55,5 +55,6 @@ timestamp: "2026-09-05T09:12:00+09:00"
 | `sapphire-tally`（`cli/`） | MIT OR Apache-2.0 |
 | `sapphire-tally-core` | MIT OR Apache-2.0 |
 | `sapphire-tally-mcp` | MIT OR Apache-2.0 |
+| `sapphire-tally-desktop` | GPL-3.0-or-later、[App Storeマーケットプレイス例外](desktop/LICENSE.App-Store-Exception)付き |
 
-デスクトップ版・モバイル版は、ほかの sapphire アプリと同じく GPL-3.0-or-later（App Storeマーケットプレイス例外付き）になります。各コンポーネントのディレクトリにある`LICENSE-MIT` / `LICENSE-APACHE`ファイルに完全なライセンス文書があります。
+モバイル版も、ほかの sapphire アプリと同じく GPL-3.0-or-later（App Storeマーケットプレイス例外付き）になります。各コンポーネントのディレクトリにある`LICENSE`（または`LICENSE-MIT` / `LICENSE-APACHE`）ファイルに完全なライセンス文書があります。
