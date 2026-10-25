@@ -1,58 +1,118 @@
-//! The app server: what `sapphire-tally serve` (and a bare `sapphire-tally`)
-//! runs.
+//! The app server: what `sapphire-tally serve` runs.
 //!
 //! The framework's [`AppServer`] owns the IPC socket, the current workspace
-//! (`workspace init|select|sync|show|move|remove|map`), signals and the log
-//! file. This module adds what is the tally's own:
+//! (`workspace init|select|sync|show|move|remove`), the settings
+//! (`config list|get|set|unset`), signals, restarts and the log file. This
+//! module adds what is the tally's own:
 //!
 //! - **sync**, through the host's `sapphire-bridge`. A bridge that is not
 //!   running is not fatal: the server serves its workspace without sync and
 //!   picks the bridge up once it starts, or again after it restarts.
 //! - **the tally's methods** (`sapphire-tally.*`), which its MCP tools call:
 //!   the framework serves those tools on stdio (`sapphire-tally mcp`) and, when
-//!   `server.toml` turns it on, at `/mcp` on the server's HTTP listener.
+//!   `config.toml`'s `[http.mcp] enabled` turns it on, at `/mcp` on the
+//!   server's HTTP listener.
 
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use sapphire_framework::server::{
-    AppServer, SERVER_CONFIG_FILE, ServerConfig, StatusRow, WorkspaceHost,
+    AppFiles, AppServer, AppSettings, FieldError, HttpConfig, SERVER_CONFIG_FILE, ServerConfig,
+    SettingDef, Settings, Staged, StatusRow, WorkspaceHost,
 };
 use sapphire_tally_core::{TALLY_CTX, Tally};
 
 /// This binary's version, reported in every handshake.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Where the HTTP listener binds unless `server.toml`'s `[http] listen` says
+/// Where the HTTP listener binds unless `config.toml`'s `[http] listen` says
 /// otherwise: loopback, on the port the MVP's MCP server used.
 pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:3174";
 
-/// The server the framework's one-shot verbs dispatch against: the tally's
-/// MCP tools and API version, nothing mounted.
-///
-/// `status`, `service`, `workspace`, `workgroup`, `device`, `embedding` and
-/// `external-device` read only the app name and the service spec from it and
-/// talk to a *running* server (or the bridge) over IPC themselves; `mcp`
-/// serves the tally's tools on stdio, dialling that server. Opening a bridge
-/// here would make `status` on a host without one fail with a bridge error
-/// instead of the framework's "no server is running".
-pub fn build_oneshot() -> AppServer {
-    AppServer::new(&TALLY_CTX, VERSION)
-        .app_api(sapphire_tally_mcp::APP_API)
-        .mcp(sapphire_tally_mcp::service())
+/// The tally's settings: no keys of its own yet, and the one check of the
+/// framework's `[http]` table that the framework does not make.
+#[derive(Clone)]
+pub struct TallySettings;
+
+impl AppSettings for TallySettings {
+    fn defs(&self) -> Vec<SettingDef> {
+        Vec::new()
+    }
+
+    /// Refuse an `[http]` table that would serve 403 to every `/mcp` client
+    /// ([`check_exposure`]). The framework runs this when the server starts,
+    /// so such a file stops the start.
+    fn validate(&self, files: &AppFiles, staged: &Staged) -> Result<(), Vec<FieldError>> {
+        // A file that cannot be read or parsed, or an `[http]` table of the
+        // wrong shape, is the framework's to report.
+        let Ok(Some(text)) = staged.read(files.device()) else {
+            return Ok(());
+        };
+        let Ok(mut table) = text.parse::<toml::Table>() else {
+            return Ok(());
+        };
+        let Some(Ok(http)) = table.remove("http").map(|t| t.try_into::<HttpConfig>()) else {
+            return Ok(());
+        };
+        if !http.mcp.enabled {
+            return Ok(());
+        }
+        let addr = http.listen.unwrap_or_else(default_http_addr);
+        check_exposure(addr, &http.allowed_hosts).map_err(|err| {
+            vec![FieldError {
+                key: Some("http.allowed_hosts".to_owned()),
+                file: Some(files.device().to_owned()),
+                message: err.to_string(),
+            }]
+        })
+    }
 }
 
 /// The tally's server, without sync: the framework's server with the tally's
 /// methods, its MCP tools, and its HTTP port.
 ///
-/// [`run`] adds the bridge; a test runs this as it is.
+/// [`build_with`] adds the bridge; a test runs this as it is.
 pub fn build() -> AppServer {
-    let server = build_oneshot().http_listen(default_http_addr());
+    let server = AppServer::new(&TALLY_CTX, VERSION)
+        .app_api(sapphire_tally_mcp::APP_API)
+        .mcp(sapphire_tally_mcp::service())
+        .http_listen(default_http_addr());
     let host = Arc::clone(server.host());
     server.extend(move |router| {
         sapphire_tally_mcp::register(router, Arc::new(move || current_tally(&host)))
     })
+}
+
+/// The server `serve` runs, built again on every restart from `settings`:
+/// [`build`], syncing through the host's bridge, with the `mcp` status row.
+///
+/// The framework connects to the bridge when the server runs, and again
+/// whenever the bridge restarts; a bridge that is not running yet stops
+/// nothing but sync. Any other failure — a bridge of another version, say —
+/// stops the start. `service`, `update` and `mcp` build this too, but neither
+/// run it nor reach the bridge through it.
+pub fn build_with(settings: &Settings) -> AppServer {
+    // Settings the framework cannot turn into its config stop the server
+    // before this row is ever shown.
+    let http = ServerConfig::from_settings(settings)
+        .map(|config| config.http)
+        .unwrap_or_default();
+    let mcp_row = if http.mcp.enabled {
+        let addr = http.listen.unwrap_or_else(default_http_addr);
+        format!("http://{addr}/mcp")
+    } else {
+        "off".to_owned()
+    };
+    build()
+        .sync_via_bridge()
+        .expect("the path of the running executable is readable")
+        .status_rows(Arc::new(move || {
+            vec![StatusRow {
+                name: "mcp".to_owned(),
+                value: mcp_row.clone(),
+            }]
+        }))
 }
 
 fn default_http_addr() -> SocketAddr {
@@ -94,35 +154,4 @@ pub fn check_exposure(addr: SocketAddr, allowed_hosts: &[String]) -> anyhow::Res
          server by any other name gets 403. List each name clients use in \
          [http] allowed_hosts of {SERVER_CONFIG_FILE}, or bind to loopback."
     )
-}
-
-/// Run the server until SIGTERM or SIGINT.
-pub async fn run() -> anyhow::Result<()> {
-    // The framework reads `server.toml` again when it starts; this read is
-    // for what the tally adds on top: the exposure check and the status row.
-    let config = ServerConfig::load_for_app(&TALLY_CTX)?;
-    let http_addr = config.http.listen.unwrap_or_else(default_http_addr);
-    if config.mcp.http {
-        check_exposure(http_addr, &config.http.allowed_hosts)?;
-    }
-
-    // Sync through the host's bridge. The framework connects, and connects
-    // again whenever the bridge restarts; a bridge that is not running yet
-    // stops nothing but sync. Any other failure — a bridge of another
-    // version, say — stops the start, in `run`.
-    let server = build().sync_via_bridge()?;
-
-    let mcp_row = if config.mcp.http {
-        format!("http://{http_addr}/mcp")
-    } else {
-        "off".to_owned()
-    };
-    let server = server.status_rows(Arc::new(move || {
-        vec![StatusRow {
-            name: "mcp".to_owned(),
-            value: mcp_row.clone(),
-        }]
-    }));
-
-    Ok(server.run().await?)
 }
