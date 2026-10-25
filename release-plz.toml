@@ -1,0 +1,42 @@
+[workspace]
+# Only the CLI makes the `v{version}` tag and GitHub release, and the desktop app
+# its `desktop-v{version}` ones; the libraries are published without tags.
+changelog_update = true
+dependencies_update = true
+publish = true
+release = true
+git_release_enable = false
+git_tag_enable = false
+# Publish only when a release PR is merged, not on every push to main that
+# carries an unpublished version.
+release_always = false
+pr_branch_prefix = "release-plz/"
+pr_labels = ["release"]
+
+# The one binary: the CLI, the app server and the MCP server.
+[[package]]
+name = "sapphire-tally"
+git_tag_enable = true
+git_release_enable = true
+git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
+
+[[package]]
+name = "sapphire-tally-core"
+
+[[package]]
+name = "sapphire-tally-mcp"
+
+# GitHub-release-only binary crate. It is not published, so its versions live in
+# its git tags; `git_only = true` is load-bearing: release-plz silently skips a
+# crate whose Cargo.toml has `publish = false` unless it is set (`release = true`
+# alone no longer does it).
+[[package]]
+name = "sapphire-tally-desktop"
+git_only = true
+# Overrides the workspace's `publish = true`, which `git_only` refuses.
+publish = false
+git_tag_enable = true
+git_release_enable = true
+git_tag_name = "desktop-v{{ version }}"
+git_release_name = "desktop-v{{ version }}"
