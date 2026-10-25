@@ -16,7 +16,7 @@ sapphire-tally workspace sync enable         # turn sync on or off later (also: 
 sapphire-tally mcp                           # MCP over stdio, for an agent to launch
 ```
 
-Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[mcp] http = true` in the app's `server.toml`.
+Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[http.mcp] enabled = true` in the app's `config.toml` (`sapphire-tally config set http.mcp.enabled=true`).
 
 ## Desktop app
 

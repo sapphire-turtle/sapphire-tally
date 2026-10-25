@@ -15,7 +15,7 @@ mod tally;
 
 use sapphire_framework::gui::app::{AppOptions, AppSetup};
 use sapphire_framework::gui::client::AppIdentity;
-use sapphire_framework::gui::{Destination, Settings, Shell, eframe, egui};
+use sapphire_framework::gui::{Destination, Settings, Shell, eframe, egui, i18n};
 
 use crate::client::TallyClient;
 use crate::tally::TallyView;
@@ -23,6 +23,13 @@ use crate::tally::TallyView;
 const APP: AppIdentity = AppIdentity {
     app_name: "sapphire-tally",
     version: env!("CARGO_PKG_VERSION"),
+};
+
+/// The tally's own strings: the rail's labels are message ids, looked up in
+/// these after the framework's.
+const RESOURCES: i18n::Resources = i18n::Resources {
+    name: "sapphire-tally-desktop",
+    files: &[("en", include_str!("../locales/en/tally.ftl"))],
 };
 
 /// The app's own screens, on the framework's rail.
@@ -53,12 +60,13 @@ fn main() -> eframe::Result<()> {
             .inner_size([1100.0, 640.0])
             .min_inner_size([720.0, 440.0]),
         |setup: AppSetup<'_>| {
+            i18n::register(&setup.cc.egui_ctx, RESOURCES);
             let tally_client = TallyClient::new(APP.app_name, APP.version, setup.endpoints.app);
             let shell = Shell::new(
                 vec![Destination::new(
                     Screen::Tally,
                     egui::include_image!("../assets/icons/calendar-check.svg"),
-                    "Tally",
+                    "tally-screen",
                 )],
                 Settings::new(setup.framework),
             );

@@ -31,6 +31,7 @@ sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.0",
 sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
 anyhow.workspace = true
 clap.workspace = true
+toml.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time"] }
 tracing.workspace = true
 

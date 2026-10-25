@@ -599,7 +599,7 @@ impl TallyView {
         let mut open = true;
         let mut action = Action::None;
         egui::Window::new(title)
-            .id(egui::Id::new("tally_stamp_window"))
+            .id(egui::Id::unique("tally_stamp_window"))
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(ctx.content_rect().center())
             .open(&mut open)
@@ -697,7 +697,7 @@ impl TallyView {
         let mut open = true;
         let mut action = Action::None;
         egui::Window::new(title)
-            .id(egui::Id::new("tally_activity_window"))
+            .id(egui::Id::unique("tally_activity_window"))
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(ctx.content_rect().center())
             .open(&mut open)
@@ -800,7 +800,7 @@ impl TallyView {
         };
         let mut keep = true;
         let mut delete = false;
-        egui::Modal::new(egui::Id::new("tally_confirm_delete")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("tally_confirm_delete")).show(ctx, |ui| {
             ui.set_max_width(380.0);
             match &confirm {
                 Confirm::Stamp(_) => {

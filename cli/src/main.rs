@@ -1,24 +1,28 @@
 use anyhow::Result;
 use clap::Parser as _;
 use sapphire_tally::cli::{Cli, Command, FrameworkCommand};
-use sapphire_tally::serve;
-use sapphire_tally_core::AppKind;
+use sapphire_tally::serve::{self, TallySettings};
+use sapphire_tally_core::{AppKind, TALLY_CTX};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        // What the service manager starts.
-        Command::Framework(FrameworkCommand::Serve) => {
-            sapphire_tally_core::init_app_context(AppKind::Server);
-            runtime()?.block_on(serve::run())
-        }
-        // `mcp` among them: its stdout is the MCP stream, and the
+        // `serve` is what the service manager starts; the rest are clients
+        // of it — `mcp` among them: its stdout is the MCP stream, and the
         // framework's console log goes to stderr (sapphire-framework#232).
         Command::Framework(command) => {
-            sapphire_tally_core::init_app_context(AppKind::Cli);
-            let code =
-                runtime()?.block_on(command.dispatch(serve::build_oneshot(), serve::VERSION))?;
+            let kind = match command {
+                FrameworkCommand::Serve => AppKind::Server,
+                _ => AppKind::Cli,
+            };
+            sapphire_tally_core::init_app_context(kind);
+            let code = runtime()?.block_on(command.dispatch(
+                &TALLY_CTX,
+                TallySettings,
+                serve::build_with,
+                serve::VERSION,
+            ))?;
             if code != 0 {
                 std::process::exit(code);
             }

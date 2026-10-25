@@ -16,7 +16,7 @@ sapphire-tally workspace sync enable         # 後から同期を切り替え（
 sapphire-tally mcp                           # stdio経由のMCP（エージェントから起動）
 ```
 
-同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `server.toml` で `[mcp] http = true` を設定すると有効になります。
+同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `config.toml` で `[http.mcp] enabled = true` を設定すると（`sapphire-tally config set http.mcp.enabled=true`）有効になります。
 
 ## デスクトップアプリ
 
