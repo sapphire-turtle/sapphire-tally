@@ -1,6 +1,7 @@
 //! The Tally tab: every activity with a year of its stamps as a heatmap, one
-//! under the other, the stamps of a day picked in one of them, and the windows
-//! that show, add, change and delete a stamp or an activity.
+//! under the other; in the side pane, the stamps of the activity or the day
+//! picked in one of them; and the windows that show, add, change and delete a
+//! stamp or an activity.
 //!
 //! Everything comes from the running server's `sapphire-tally.*` methods
 //! ([`TallyClient`]), so the tab shows the workspace the server has selected.
@@ -14,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{Datelike as _, Days, Local, NaiveDate};
 use grain_id::GrainId;
-use sapphire_framework::gui::egui;
+use sapphire_framework::gui::{Side, egui, tr};
 use sapphire_tally_core::{Activity, Stamp};
 use sapphire_tally_mcp::methods::{
     ActivityDeleteParams, ActivityDeleted, EmptyParams, IdParams, QueryParams, StampAddParams,
@@ -69,6 +70,42 @@ struct Window<F> {
     form: F,
 }
 
+/// What the side pane lists the stamps of: one activity, in the grid's whole
+/// range or on one day of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pick {
+    activity: GrainId,
+    /// `None` for the whole range.
+    day: Option<NaiveDate>,
+}
+
+impl Pick {
+    /// The pick after `day` is clicked in `activity`'s heatmap: that day, or
+    /// back to the whole activity when it was the day picked already.
+    fn day_clicked(current: Option<Pick>, activity: GrainId, day: NaiveDate) -> Pick {
+        let again = current
+            == Some(Pick {
+                activity,
+                day: Some(day),
+            });
+        Pick {
+            activity,
+            day: (!again).then_some(day),
+        }
+    }
+
+    /// Its stamps among `stamps`, newest first.
+    fn stamps(self, stamps: &[Stamp]) -> Vec<&Stamp> {
+        let mut picked: Vec<&Stamp> = stamps
+            .iter()
+            .filter(|s| s.activity == self.activity)
+            .filter(|s| self.day.is_none_or(|d| s.timestamp.date_naive() == d))
+            .collect();
+        picked.sort_by_key(|s| std::cmp::Reverse(s.timestamp));
+        picked
+    }
+}
+
 /// A delete waiting for the person to confirm it.
 enum Confirm {
     Stamp(GrainId),
@@ -88,9 +125,9 @@ pub struct TallyView {
     last_refresh: Option<Instant>,
     /// The days the heatmaps cover, and the range the stamps were read for.
     grid: Grid,
-    /// The day picked in one activity's heatmap: its stamps are listed under
-    /// that heatmap.
-    picked: Option<(GrainId, NaiveDate)>,
+    /// The activity, or the day in its heatmap, whose stamps the side pane
+    /// lists.
+    picked: Option<Pick>,
     /// The last write's confirmation, shown under the toolbar.
     notice: Option<String>,
 
@@ -129,7 +166,8 @@ impl TallyView {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    /// The screen. Picking an activity or a day opens `side` on its stamps.
+    pub fn ui(&mut self, ui: &mut egui::Ui, side: &mut Side) {
         self.drain_replies();
         if !self.loading
             && self
@@ -145,7 +183,7 @@ impl TallyView {
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| self.activities(ui));
+                .show(ui, |ui| self.activities(ui, side));
         });
 
         self.stamp_window(ui.ctx());
@@ -300,8 +338,8 @@ impl TallyView {
                 // A refresh for a range the view has moved away from.
                 Reply::Data(grid, _) if grid != self.grid => {}
                 Reply::Data(_, Ok(data)) => {
-                    if let Some((id, _)) = self.picked
-                        && !data.activities.iter().any(|a| a.id == id)
+                    if let Some(pick) = self.picked
+                        && !data.activities.iter().any(|a| a.id == pick.activity)
                     {
                         self.picked = None;
                     }
@@ -421,9 +459,8 @@ impl TallyView {
         }
     }
 
-    /// Every activity: its name and buttons, its heatmap, and the stamps of
-    /// the day picked in it.
-    fn activities(&mut self, ui: &mut egui::Ui) {
+    /// Every activity: its name and buttons, and its heatmap.
+    fn activities(&mut self, ui: &mut egui::Ui, side: &mut Side) {
         let Some(data) = &self.data else {
             ui.label("Loading…");
             return;
@@ -438,11 +475,13 @@ impl TallyView {
             if i > 0 {
                 ui.separator();
             }
-            ui.push_id(activity.id.to_string(), |ui| self.activity(ui, activity));
+            ui.push_id(activity.id.to_string(), |ui| {
+                self.activity(ui, activity, side)
+            });
         }
     }
 
-    fn activity(&mut self, ui: &mut egui::Ui, activity: &Activity) {
+    fn activity(&mut self, ui: &mut egui::Ui, activity: &Activity, side: &mut Side) {
         let Some(data) = &self.data else {
             return;
         };
@@ -455,10 +494,14 @@ impl TallyView {
                     egui::Label::new(egui::RichText::new(&activity.title).heading())
                         .sense(egui::Sense::click()),
                 )
-                .on_hover_text("Show its details")
+                .on_hover_text("Show its stamps")
                 .clicked()
             {
-                self.open_activity(activity);
+                self.picked = Some(Pick {
+                    activity: activity.id,
+                    day: None,
+                });
+                side.open();
             }
             let noun = if total == 1 { "stamp" } else { "stamps" };
             ui.weak(format!("{total} {noun}"));
@@ -483,56 +526,78 @@ impl TallyView {
 
         let picked_day = self
             .picked
-            .filter(|(id, _)| *id == activity.id)
-            .map(|(_, day)| day);
+            .filter(|p| p.activity == activity.id)
+            .and_then(|p| p.day);
         if let Some(day) = heatmap_ui(ui, self.grid, &counts, picked_day) {
-            self.picked = (picked_day != Some(day)).then_some((activity.id, day));
-        }
-        if let Some(day) = picked_day {
-            self.day_stamps(ui, activity.id, day);
+            self.picked = Some(Pick::day_clicked(self.picked, activity.id, day));
+            side.open();
         }
     }
 
-    fn day_stamps(&mut self, ui: &mut egui::Ui, activity: GrainId, day: NaiveDate) {
-        let Some(data) = &self.data else {
+    // ── side pane ───────────────────────────────────────────────────────────
+
+    /// The picked activity's stamps, in the range or on the day picked, newest
+    /// first; a stamp clicked opens in its window.
+    pub fn side_ui(&mut self, ui: &mut egui::Ui, side: &mut Side) {
+        let (Some(pick), Some(data)) = (self.picked, &self.data) else {
+            ui.weak(tr!(ui, "tally-side-none"));
             return;
         };
-        let mut stamps: Vec<&Stamp> = data
-            .stamps
+        let title = data
+            .activities
             .iter()
-            .filter(|s| s.activity == activity && s.timestamp.date_naive() == day)
-            .collect();
-        stamps.reverse();
+            .find(|a| a.id == pick.activity)
+            .map_or_else(|| pick.activity.to_string(), |a| a.title.clone());
+        let stamps = pick.stamps(&data.stamps);
 
         let mut open = None;
-        let mut close = false;
-        ui.add_space(4.0);
+        let mut clear = false;
         ui.horizontal(|ui| {
-            ui.strong(format!("Stamps on {day}"));
-            if ui.small_button("Close").clicked() {
-                close = true;
-            }
+            ui.heading(title);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button(tr!(ui, "tally-side-clear")).clicked() {
+                    clear = true;
+                }
+            });
         });
+        let period = match pick.day {
+            Some(day) => tr!(ui, "tally-side-day", day = day.to_string()),
+            None => tr!(
+                ui,
+                "tally-side-range",
+                from = self.grid.start.to_string(),
+                to = self.grid.end.to_string(),
+            ),
+        };
+        ui.label(period);
+        ui.weak(tr!(ui, "tally-side-count", count = stamps.len()));
+        ui.separator();
         if stamps.is_empty() {
-            ui.weak("No stamps.");
+            ui.weak(tr!(ui, "tally-side-empty"));
         } else {
-            egui::Grid::new("day_stamps")
-                .num_columns(2)
-                .striped(true)
-                .spacing([16.0, 4.0])
+            let hover = tr!(ui, "tally-side-show-stamp");
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    for stamp in stamps {
-                        let when = stamp.timestamp.format("%H:%M").to_string();
-                        if ui.link(when).on_hover_text("Show this stamp").clicked() {
-                            open = Some(stamp.clone());
-                        }
-                        ui.label(first_line(stamp.comment.as_deref().unwrap_or_default()));
-                        ui.end_row();
-                    }
+                    egui::Grid::new("picked_stamps")
+                        .num_columns(2)
+                        .striped(true)
+                        .spacing([16.0, 4.0])
+                        .show(ui, |ui| {
+                            for stamp in stamps {
+                                let when = stamp.timestamp.format(form::TIME_FORMAT).to_string();
+                                if ui.link(when).on_hover_text(&hover).clicked() {
+                                    open = Some(stamp.clone());
+                                }
+                                ui.label(first_line(stamp.comment.as_deref().unwrap_or_default()));
+                                ui.end_row();
+                            }
+                        });
                 });
         }
-        if close {
+        if clear {
             self.picked = None;
+            side.close();
         }
         if let Some(stamp) = open {
             self.stamp_window = Some(Window {
@@ -549,7 +614,10 @@ impl TallyView {
     fn open_new_stamp(&mut self, activity: GrainId) {
         let mut form = StampForm::new(Some(activity), Local::now().fixed_offset());
         // A stamp added while a past day is picked is most likely for that day.
-        if let Some((id, day)) = self.picked
+        if let Some(Pick {
+            activity: id,
+            day: Some(day),
+        }) = self.picked
             && id == activity
             && day != today()
         {
@@ -1059,6 +1127,71 @@ fn today() -> NaiveDate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stamp(id: &str, activity: &str, ts: &str) -> Stamp {
+        Stamp {
+            id: id.parse().unwrap(),
+            activity: activity.parse().unwrap(),
+            timestamp: chrono::DateTime::parse_from_rfc3339(ts).unwrap(),
+            comment: None,
+        }
+    }
+
+    #[test]
+    fn a_day_clicked_again_goes_back_to_the_whole_activity() {
+        let a: GrainId = "012atvw".parse().unwrap();
+        let b: GrainId = "012atvx".parse().unwrap();
+        let day = NaiveDate::from_ymd_opt(2026, 9, 5).unwrap();
+        let picked = Pick::day_clicked(None, a, day);
+        assert_eq!(
+            picked,
+            Pick {
+                activity: a,
+                day: Some(day)
+            }
+        );
+        assert_eq!(
+            Pick::day_clicked(Some(picked), a, day),
+            Pick {
+                activity: a,
+                day: None
+            }
+        );
+        assert_eq!(
+            Pick::day_clicked(Some(picked), b, day),
+            Pick {
+                activity: b,
+                day: Some(day)
+            },
+            "the same day in another activity is picked, not dropped"
+        );
+    }
+
+    #[test]
+    fn a_pick_lists_its_stamps_newest_first() {
+        let stamps = [
+            stamp("012ats1", "012atvw", "2026-09-05T08:00:00+09:00"),
+            stamp("012ats2", "012atvw", "2026-09-06T00:10:00+09:00"),
+            stamp("012ats3", "012atvx", "2026-09-05T12:00:00+09:00"),
+            stamp("012ats4", "012atvw", "2026-09-05T23:30:00+09:00"),
+        ];
+        let ids = |pick: Pick| -> Vec<String> {
+            pick.stamps(&stamps)
+                .iter()
+                .map(|s| s.id.to_string())
+                .collect()
+        };
+        let activity = "012atvw".parse().unwrap();
+        assert_eq!(
+            ids(Pick {
+                activity,
+                day: None
+            }),
+            ["012ats2", "012ats4", "012ats1"]
+        );
+        let day = NaiveDate::from_ymd_opt(2026, 9, 5);
+        assert_eq!(ids(Pick { activity, day }), ["012ats4", "012ats1"]);
+    }
 
     #[test]
     fn a_stamp_is_described_by_its_activity() {
