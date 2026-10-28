@@ -18,8 +18,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use sapphire_framework::server::{
-    AppFiles, AppServer, AppSettings, FieldError, HttpConfig, SERVER_CONFIG_FILE, ServerConfig,
-    SettingDef, Settings, Staged, StatusRow, WorkspaceHost,
+    AppFiles, AppServer, AppSettings, FieldError, HttpConfig, ReleaseSource, SERVER_CONFIG_FILE,
+    ServerConfig, SettingDef, Settings, Staged, StatusRow, WorkspaceHost,
 };
 use sapphire_tally_core::{TALLY_CTX, Tally};
 
@@ -75,6 +75,7 @@ impl AppSettings for TallySettings {
 /// [`build_with`] adds the bridge; a test runs this as it is.
 pub fn build() -> AppServer {
     let server = AppServer::new(&TALLY_CTX, VERSION)
+        .releases(release_source())
         .app_api(sapphire_tally_mcp::APP_API)
         .mcp(sapphire_tally_mcp::service())
         .http_listen(default_http_addr());
@@ -154,4 +155,12 @@ pub fn check_exposure(addr: SocketAddr, allowed_hosts: &[String]) -> anyhow::Res
          server by any other name gets 403. List each name clients use in \
          [http] allowed_hosts of {SERVER_CONFIG_FILE}, or bind to loopback."
     )
+}
+
+/// Where the app's releases are published: what `update` installs from, and where the
+/// server looks once a day for a newer one.
+fn release_source() -> ReleaseSource {
+    ReleaseSource::github("sapphire-turtle", "sapphire-tally")
+        .asset("sapphire-tally")
+        .cargo_crate("sapphire-tally")
 }
