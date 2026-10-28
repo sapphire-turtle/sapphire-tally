@@ -15,7 +15,7 @@ mod tally;
 
 use sapphire_framework::gui::app::{AppOptions, AppSetup};
 use sapphire_framework::gui::client::AppIdentity;
-use sapphire_framework::gui::{Destination, Settings, Shell, eframe, egui, i18n};
+use sapphire_framework::gui::{Destination, Settings, Shell, ShellApp, Side, eframe, egui, i18n};
 
 use crate::client::TallyClient;
 use crate::tally::TallyView;
@@ -45,12 +45,20 @@ struct App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let tally = &mut self.tally;
-        self.shell.ui(ui, |ui, screen| match screen {
-            Screen::Tally => {
-                egui::CentralPanel::default().show(ui, |ui| tally.ui(ui));
-            }
-        });
+        self.shell.show(ui, &mut self.tally);
+    }
+}
+
+impl ShellApp<Screen> for TallyView {
+    fn screen_ui(&mut self, ui: &mut egui::Ui, screen: Screen, side: &mut Side) {
+        match screen {
+            Screen::Tally => self.ui(ui, side),
+        }
+    }
+
+    /// The stamps of what is picked on the Tally screen, Settings or not.
+    fn side_ui(&mut self, ui: &mut egui::Ui, _: Option<Screen>, side: &mut Side) {
+        TallyView::side_ui(self, ui, side);
     }
 }
 
