@@ -1,8 +1,8 @@
-//! The one binary's command line: the framework's verbs, flat at the top
-//! level.
+//! The command line both editions run: the framework's verbs, flat at the
+//! top level.
 
 use clap::Parser as _;
-use sapphire_tally::cli::{Cli, Command, FrameworkCommand};
+use sapphire_tally_cli::cli::{Cli, Command, FrameworkCommand};
 
 fn parse(args: &[&str]) -> Cli {
     Cli::try_parse_from(std::iter::once("sapphire-tally").chain(args.iter().copied()))

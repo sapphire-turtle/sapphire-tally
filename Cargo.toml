@@ -1,11 +1,13 @@
 [workspace]
 members = [
-    "cli",
+    "headless",
+    "crates/sapphire-tally-cli",
     "crates/sapphire-tally-core",
     "crates/sapphire-tally-mcp",
+    "crates/sapphire-tally-server",
     "desktop",
 ]
-default-members = ["cli"]
+default-members = ["headless"]
 resolver = "3"
 
 [workspace.package]

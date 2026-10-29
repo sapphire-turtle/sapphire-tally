@@ -5074,19 +5074,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "sapphire-tally"
-version = "0.1.0"
+name = "sapphire-tally-cli"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
  "sapphire-framework",
  "sapphire-tally-core",
- "sapphire-tally-mcp",
- "serde_json",
- "tempfile",
+ "sapphire-tally-server",
  "tokio",
- "toml",
- "tracing",
 ]
 
 [[package]]
@@ -5105,19 +5101,32 @@ dependencies = [
 
 [[package]]
 name = "sapphire-tally-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "anyhow",
  "chrono",
+ "clap",
  "grain-id",
  "sapphire-framework",
- "sapphire-tally",
+ "sapphire-tally-cli",
  "sapphire-tally-core",
  "sapphire-tally-mcp",
+ "sapphire-tally-server",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sapphire-tally-headless"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "sapphire-tally-cli",
+ "tempfile",
 ]
 
 [[package]]
@@ -5135,6 +5144,20 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "sapphire-tally-server"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "sapphire-framework",
+ "sapphire-tally-core",
+ "sapphire-tally-mcp",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

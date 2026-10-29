@@ -1,0 +1,29 @@
+[package]
+name = "sapphire-tally-server"
+edition.workspace = true
+# Released together with the editions that run it (release-plz.toml).
+version = "0.2.0"
+description = "sapphire-tally's app server: the one process that reads and writes the tally, with its sync and MCP methods"
+license.workspace = true
+repository.workspace = true
+keywords = ["tracker", "heatmap", "mcp"]
+
+[features]
+default = ["redb-store"]
+redb-store = [
+    "sapphire-tally-core/redb-store",
+    "sapphire-tally-mcp/redb-store",
+    "sapphire-framework/redb-store",
+]
+
+[dependencies]
+sapphire-tally-core = { path = "../sapphire-tally-core", version = "0.1.0", default-features = false }
+sapphire-tally-mcp = { path = "../sapphire-tally-mcp", version = "0.1.0", default-features = false }
+sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
+anyhow.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
