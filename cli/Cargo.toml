@@ -1,6 +1,6 @@
 [package]
 name = "sapphire-tally"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 description.workspace = true
 license.workspace = true
@@ -26,8 +26,8 @@ redb-store = [
 ]
 
 [dependencies]
-sapphire-tally-core = { path = "../crates/sapphire-tally-core", version = "0.1.0", default-features = false }
-sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.0", default-features = false }
+sapphire-tally-core = { path = "../crates/sapphire-tally-core", version = "0.1.1", default-features = false }
+sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.1", default-features = false }
 sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
 anyhow.workspace = true
 clap.workspace = true
