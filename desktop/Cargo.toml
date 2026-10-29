@@ -1,6 +1,6 @@
 [package]
 name = "sapphire-tally-desktop"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 description = "Desktop GUI for sapphire-tally"
 license-file = "LICENSE"
@@ -13,8 +13,8 @@ publish = false
 sapphire-framework = { workspace = true, features = ["eframe", "ipc"] }
 # The record types the server's answers deserialize into, and the methods'
 # parameters and names. No store: the desktop reads nothing from disk.
-sapphire-tally-core = { path = "../crates/sapphire-tally-core", version = "0.1.0", default-features = false }
-sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.0", default-features = false }
+sapphire-tally-core = { path = "../crates/sapphire-tally-core", version = "0.1.1", default-features = false }
+sapphire-tally-mcp = { path = "../crates/sapphire-tally-mcp", version = "0.1.1", default-features = false }
 chrono.workspace = true
 grain-id.workspace = true
 serde.workspace = true
