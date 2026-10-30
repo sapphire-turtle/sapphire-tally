@@ -21,8 +21,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use sapphire_framework::server::{
-    AppFiles, AppServer, AppSettings, FieldError, HttpConfig, SERVER_CONFIG_FILE, ServerConfig,
-    SettingDef, Settings, Staged, StatusRow, WorkspaceHost,
+    AppFiles, AppServer, AppSettings, FieldError, HttpConfig, ReleaseSource, SERVER_CONFIG_FILE,
+    ServerConfig, SettingDef, Settings, Staged, StatusRow, WorkspaceHost,
 };
 use sapphire_tally_core::{TALLY_CTX, Tally};
 
@@ -32,6 +32,32 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Where the HTTP listener binds unless `config.toml`'s `[http] listen` says
 /// otherwise: loopback, on the port the MVP's MCP server used.
 pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:3174";
+
+/// Which edition runs the server: the release file `update` installs is the
+/// edition's own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edition {
+    /// `sapphire-tally-headless`, the command line alone.
+    Headless,
+    /// `sapphire-tally-desktop`, the desktop app.
+    Desktop,
+}
+
+impl Edition {
+    /// Where the edition's releases are published: what `update` installs
+    /// from, and where the server looks once a day for a newer one. Both are
+    /// in the shared `v{version}` release (release-binaries.yml), as
+    /// `<crate>-<os>-<arch>`; only the headless edition is on crates.io.
+    pub fn releases(self) -> ReleaseSource {
+        let source = ReleaseSource::github("sapphire-turtle", "sapphire-tally");
+        match self {
+            Edition::Headless => source
+                .asset("sapphire-tally-headless")
+                .cargo_crate("sapphire-tally-headless"),
+            Edition::Desktop => source.asset("sapphire-tally-desktop"),
+        }
+    }
+}
 
 /// The tally's settings: no keys of its own yet, and the one check of the
 /// framework's `[http]` table that the framework does not make.
@@ -88,14 +114,15 @@ pub fn build() -> AppServer {
 }
 
 /// The server `serve` runs, built again on every restart from `settings`:
-/// [`build`], syncing through the host's bridge, with the `mcp` status row.
+/// [`build`], syncing through the host's bridge, with the `mcp` status row and
+/// `edition`'s releases.
 ///
 /// The framework connects to the bridge when the server runs, and again
 /// whenever the bridge restarts; a bridge that is not running yet stops
 /// nothing but sync. Any other failure — a bridge of another version, say —
 /// stops the start. `service`, `update` and `mcp` build this too, but neither
 /// run it nor reach the bridge through it.
-pub fn build_with(settings: &Settings) -> AppServer {
+pub fn build_with(settings: &Settings, edition: Edition) -> AppServer {
     // Settings the framework cannot turn into its config stop the server
     // before this row is ever shown.
     let http = ServerConfig::from_settings(settings)
@@ -108,6 +135,7 @@ pub fn build_with(settings: &Settings) -> AppServer {
         "off".to_owned()
     };
     build()
+        .releases(edition.releases())
         .sync_via_bridge()
         .expect("the path of the running executable is readable")
         .status_rows(Arc::new(move || {

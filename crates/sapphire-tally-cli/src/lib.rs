@@ -16,11 +16,13 @@ use anyhow::Result;
 use sapphire_tally_core::{AppKind, TALLY_CTX};
 use sapphire_tally_server::{self as serve, TallySettings};
 
+pub use sapphire_tally_server::Edition;
+
 use crate::cli::{Command, FrameworkCommand};
 
-/// Run one command, exiting the process with its code when a framework verb
-/// fails with one.
-pub fn run(command: Command) -> Result<()> {
+/// Run one command as `edition`, exiting the process with its code when a
+/// framework verb fails with one.
+pub fn run(command: Command, edition: Edition) -> Result<()> {
     match command {
         // `serve` is what the service manager starts; the rest are clients
         // of it — `mcp` among them: its stdout is the MCP stream, and the
@@ -38,7 +40,7 @@ pub fn run(command: Command) -> Result<()> {
             let code = runtime()?.block_on(command.dispatch(
                 &TALLY_CTX,
                 TallySettings,
-                serve::build_with,
+                |settings| serve::build_with(settings, edition),
                 serve::VERSION,
             ))?;
             if code != 0 {
