@@ -83,7 +83,7 @@ struct DesktopCli {
 
 fn main() -> anyhow::Result<()> {
     match DesktopCli::parse().command {
-        Some(command) => sapphire_tally_cli::run(command),
+        Some(command) => sapphire_tally_cli::run(command, sapphire_tally_cli::Edition::Desktop),
         None => Ok(window()?),
     }
 }

@@ -4,8 +4,9 @@
 
 use anyhow::Result;
 use clap::Parser as _;
+use sapphire_tally_cli::Edition;
 use sapphire_tally_cli::cli::Cli;
 
 fn main() -> Result<()> {
-    sapphire_tally_cli::run(Cli::parse().command)
+    sapphire_tally_cli::run(Cli::parse().command, Edition::Headless)
 }
