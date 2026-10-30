@@ -1,9 +1,14 @@
 //! sapphire-tally's desktop app: the heatmap and its stamps on the
-//! framework's shell, with its Settings.
+//! framework's shell, with its Settings — and, given a subcommand, the CLI.
 //!
-//! A pure client, like sapphire-ledger's: it talks to the service-managed
-//! `sapphire-tally serve` and `sapphire-bridge` over IPC and never starts
-//! either itself. The Tally screen calls the server's `sapphire-tally.*`
+//! This one binary is a superset of the CLI's: bare, it opens the window;
+//! with `serve`, `mcp`, `status`, `workspace`, … it runs the CLI's own code
+//! (`sapphire_tally_cli::run`), so the service manager and MCP clients can
+//! start it as they start `sapphire-tally`.
+//!
+//! The window is a pure client, like sapphire-ledger's: it talks to the
+//! service-managed `sapphire-tally serve` and `sapphire-bridge` over IPC and
+//! never starts either itself. The Tally screen calls the server's `sapphire-tally.*`
 //! methods, so it shows the workspace the server has selected; Settings, at
 //! the rail's foot, picks that workspace and manages the workgroup. Closing
 //! the window stops nothing.
@@ -13,9 +18,11 @@ mod form;
 mod heatmap;
 mod tally;
 
+use clap::Parser;
 use sapphire_framework::gui::app::{AppOptions, AppSetup};
 use sapphire_framework::gui::client::AppIdentity;
 use sapphire_framework::gui::{Destination, Settings, Shell, ShellApp, Side, eframe, egui, i18n};
+use sapphire_tally_cli::cli::Command;
 
 use crate::client::TallyClient;
 use crate::tally::TallyView;
@@ -62,7 +69,26 @@ impl ShellApp<Screen> for TallyView {
     }
 }
 
-fn main() -> eframe::Result<()> {
+/// The CLI's command line, with the subcommand optional: none opens the window.
+#[derive(Parser)]
+#[command(
+    name = "sapphire-tally",
+    about = "Stamp tracker with GitHub-style heatmaps: the desktop app, or the CLI's commands",
+    version
+)]
+struct DesktopCli {
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+fn main() -> anyhow::Result<()> {
+    match DesktopCli::parse().command {
+        Some(command) => sapphire_tally_cli::run(command),
+        None => Ok(window()?),
+    }
+}
+
+fn window() -> eframe::Result<()> {
     sapphire_framework::gui::app::run(
         AppOptions::new(APP, "Sapphire Tally")
             .inner_size([1100.0, 640.0])

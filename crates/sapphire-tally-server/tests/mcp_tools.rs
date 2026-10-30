@@ -14,10 +14,10 @@ use sapphire_framework::backend::protocol as proto;
 use sapphire_framework::ipc::{self, ClientInfo, Endpoint};
 use sapphire_framework::mcp::ToolContext;
 use sapphire_framework::mcp::rmcp::handler::server::wrapper::Parameters;
-use sapphire_tally::serve;
 use sapphire_tally_core::{AppKind, TALLY_CTX};
 use sapphire_tally_mcp::TallyTools;
 use sapphire_tally_mcp::methods::{ActivityAddParams, EmptyParams, QueryParams, StampAddParams};
+use sapphire_tally_server as serve;
 
 async fn wait_until_listening(endpoint: &Endpoint) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);

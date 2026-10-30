@@ -2,11 +2,12 @@ use clap::{Parser, Subcommand};
 
 pub use sapphire_framework::server::FrameworkCommand;
 
-/// The command line of the one binary this app ships.
+/// The command line both editions run: the headless edition's `sapphire-tally`,
+/// and the desktop app's binary when given a subcommand.
 ///
 /// The framework's verbs sit at the top level, where the tally's own verbs
-/// will join them. A bare invocation prints the help; the service manager starts the
-/// binary with `serve`.
+/// will join them. A bare invocation prints the help (the desktop app's opens its
+/// window instead); the service manager starts the binary with `serve`.
 #[derive(Parser)]
 #[command(
     name = "sapphire-tally",
