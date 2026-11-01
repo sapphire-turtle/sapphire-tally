@@ -2,7 +2,7 @@
 
 The headless edition of [sapphire-tally](https://github.com/sapphire-turtle/sapphire-tally) — a stamp tracker with GitHub-style heatmaps —
 for hosts without a GUI. Its one binary, `sapphire-tally`, runs the app server that serves
-and syncs a tally, carries the framework's verbs (`workspace`, `workgroup`, `status`, …),
+and syncs a tally, carries the framework's verbs (`workspace`, `api-key`, `status`, …),
 and is the MCP server for AI agents (`sapphire-tally mcp`). The desktop app's binary runs
 the same commands and is put on PATH under the same name.
 
