@@ -1,0 +1,47 @@
+//! Sapphire Tally as a Velopack package (#28), on the framework's `gui::package`:
+//! [`PACKAGE`] is what `main` hands to `package::start`, its one service is the app server's
+//! `serve`, and its command goes on `PATH` as `sapphire-tally`.
+
+use sapphire_framework::gui::package::runtime::{CliSpec, PackageSpec, Services};
+use sapphire_framework::gui::package::{AppPackage, ServiceSpec};
+
+/// The package: its command, and the app server's service, which an update stops and starts.
+pub static PACKAGE: PackageSpec = PackageSpec {
+    app_name: "sapphire-tally",
+    on_installed: None,
+    on_uninstalling: None,
+    before_apply: None,
+    cli: Some(CliSpec {
+        command: "sapphire-tally",
+    }),
+    services: Services::new(&[app_service]),
+};
+
+/// The package as the framework runs it: released with this repository's `v<version>`
+/// releases.
+pub const APP_PACKAGE: AppPackage = AppPackage {
+    name: "Sapphire Tally",
+    github: ("sapphire-turtle", "sapphire-tally"),
+    spec: &PACKAGE,
+    service: app_service,
+};
+
+/// The app server's service, for this binary's version.
+pub fn app_service() -> ServiceSpec {
+    sapphire_framework::server::app_service_spec("sapphire-tally", env!("CARGO_PKG_VERSION"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn package_names_the_app_and_its_service() {
+        assert_eq!(PACKAGE.app_name, "sapphire-tally");
+        assert_eq!(APP_PACKAGE.command(), "sapphire-tally");
+        assert_eq!(APP_PACKAGE.desktop_asset(), "sapphire-tally-desktop");
+        let service = app_service();
+        assert_eq!(service.app_name, "sapphire-tally");
+        assert_eq!(service.args, ["serve"]);
+    }
+}
