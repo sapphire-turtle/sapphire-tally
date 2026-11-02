@@ -10,8 +10,8 @@
 //! service-managed `sapphire-tally serve` and `sapphire-bridge` over IPC and
 //! never starts either itself. The Tally screen calls the server's `sapphire-tally.*`
 //! methods, so it shows the workspace the server has selected; Settings, at
-//! the rail's foot, picks that workspace and manages the workgroup. Closing
-//! the window stops nothing.
+//! the rail's foot, picks that workspace, manages its API keys and opens the
+//! Sapphire Bridge window. Closing the window stops nothing.
 
 mod client;
 mod form;

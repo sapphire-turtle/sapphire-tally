@@ -8,7 +8,7 @@ A stamp tracker with GitHub-style heatmaps built on [sapphire-framework](https:/
 
 > **Works with any MCP client.** AI integration is a standard MCP server, so sapphire-tally is not tied to [sapphire-agent](https://github.com/sapphire-turtle/sapphire-agent) despite the shared name — any AI harness that can act as an MCP client (Claude Code, Claude Desktop, …) can use it.
 
-**Under development.** One command, `sapphire-tally`, runs the app server and carries the framework's verbs (`workspace`, `workgroup`, `mcp`, …).
+**Under development.** One command, `sapphire-tally`, runs the app server and carries the framework's verbs (`workspace`, `api-key`, `config`, `mcp`, …); the workgroup, its devices and embedding are `sapphire-bridge`'s.
 
 ## Installation
 
@@ -61,11 +61,11 @@ sapphire-tally workspace sync enable         # turn sync on or off later (also: 
 sapphire-tally mcp                           # MCP over stdio, for an agent to launch
 ```
 
-Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[http.mcp] enabled = true` in the app's `config.toml` (`sapphire-tally config set http.mcp.enabled=true`).
+Sync goes through the host's `sapphire-bridge`; without one running, the server serves its workspace unsynced. To serve MCP over HTTP at `http://127.0.0.1:3174/mcp`, set `[http.mcp] enabled = true` in the app's `config.toml` (`sapphire-tally config set http.mcp.enabled=true`). HTTP clients present an API key from `sapphire-tally api-key add <name> --profile read-only|read-write`; a read-only key may call only the reading tools.
 
 ## Desktop app
 
-`sapphire-tally-desktop` lists every activity with a year of its stamps as a GitHub-style heatmap — darker days have more stamps. Click a day to list its stamps, and a stamp to see, edit or delete it; **Stamp now**, **Stamp…**, **New activity** and **Details** add, change and delete records (deleting an activity deletes its stamps, after a confirmation). The Sync tab picks the server's workspace and manages the workgroup. Like the CLI, the window talks to the running `sapphire-tally` server and never starts one.
+`sapphire-tally-desktop` lists every activity with a year of its stamps as a GitHub-style heatmap — darker days have more stamps. Click a day to list its stamps, and a stamp to see, edit or delete it; **Stamp now**, **Stamp…**, **New activity** and **Details** add, change and delete records (deleting an activity deletes its stamps, after a confirmation). Settings pick the server's workspace and manage its API keys, and open the Sapphire Bridge window for the workgroup. Like the CLI, the window talks to the running `sapphire-tally` server and never starts one.
 
 Its binary is also the CLI: run bare it opens the window, and with a subcommand (`serve`, `mcp`, `status`, `workspace`, …) it does what `sapphire-tally` does. Its installer (in preparation) puts it on PATH as `sapphire-tally`, so install it instead of the headless edition, not beside it. Until then, the binaries on the [Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) page (`sapphire-tally-desktop-<os>-<arch>`) can be run directly.
 

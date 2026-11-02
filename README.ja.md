@@ -8,7 +8,7 @@ sapphire-framework上に構築された、GitHub草風ヒートマップ付き�
 
 > **任意のMCPクライアントから使えます。** AIとの連携は汎用的なMCPサーバーとして実装しているため、名前が同じ[sapphire-agent](https://github.com/sapphire-turtle/sapphire-agent)専用ではありません。MCPクライアント機能を持つAIハーネス（Claude Code、Claude Desktopなど）であれば何でも連携できます。
 
-**開発中です。** 1つのコマンド `sapphire-tally` がアプリサーバーを動かし、frameworkの動詞（`workspace`・`workgroup`・`mcp` など）も備えます。
+**開発中です。** 1つのコマンド `sapphire-tally` がアプリサーバーを動かし、frameworkの動詞（`workspace`・`api-key`・`config`・`mcp` など）も備えます。ワークグループ・デバイス・埋め込みは `sapphire-bridge` のコマンドです。
 
 ## インストール
 
@@ -58,11 +58,11 @@ sapphire-tally workspace sync enable         # 後から同期を切り替え（
 sapphire-tally mcp                           # stdio経由のMCP（エージェントから起動）
 ```
 
-同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `config.toml` で `[http.mcp] enabled = true` を設定すると（`sapphire-tally config set http.mcp.enabled=true`）有効になります。
+同期はホストの `sapphire-bridge` を経由します。bridgeが動いていなければ、同期なしでワークスペースを提供します。HTTP経由のMCP（`http://127.0.0.1:3174/mcp`）は、アプリの `config.toml` で `[http.mcp] enabled = true` を設定すると（`sapphire-tally config set http.mcp.enabled=true`）有効になります。HTTPのクライアントは `sapphire-tally api-key add <名前> --profile read-only|read-write` で作ったAPIキーを使います。読み取り専用のキーは読み取りのツールだけを呼べます。
 
 ## デスクトップアプリ
 
-`sapphire-tally-desktop` は、すべての種目を、それぞれの1年分のスタンプをGitHubの草のようなヒートマップ付きで一覧表示します（スタンプが多い日ほど濃い色）。日をクリックするとその日のスタンプ一覧、スタンプをクリックすると詳細表示・編集・削除ができます。**Stamp now**・**Stamp…**・**New activity**・**Details** で記録の追加・変更・削除ができます（種目を削除すると、確認のうえでそのスタンプもすべて削除されます）。Syncタブではサーバーのワークスペース選択とワークグループの管理ができます。CLIと同じく、ウィンドウは動作中の `sapphire-tally` サーバーと通信し、自分でサーバーを起動することはありません。
+`sapphire-tally-desktop` は、すべての種目を、それぞれの1年分のスタンプをGitHubの草のようなヒートマップ付きで一覧表示します（スタンプが多い日ほど濃い色）。日をクリックするとその日のスタンプ一覧、スタンプをクリックすると詳細表示・編集・削除ができます。**Stamp now**・**Stamp…**・**New activity**・**Details** で記録の追加・変更・削除ができます（種目を削除すると、確認のうえでそのスタンプもすべて削除されます）。設定ではサーバーのワークスペース選択とAPIキーの管理ができ、ワークグループはそこから開くSapphire Bridgeのウィンドウで管理します。CLIと同じく、ウィンドウは動作中の `sapphire-tally` サーバーと通信し、自分でサーバーを起動することはありません。
 
 このバイナリはCLIも兼ねます。引数なしならウィンドウを開き、サブコマンド（`serve`・`mcp`・`status`・`workspace` など）を付ければ `sapphire-tally` と同じ処理をします。インストーラー（準備中）はこれを `sapphire-tally` として PATH に置くので、ヘッドレス版と並べずに、その代わりに入れてください。それまでは [Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) のバイナリ（`sapphire-tally-desktop-<os>-<arch>`）をそのまま実行できます。
 
