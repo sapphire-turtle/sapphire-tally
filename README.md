@@ -18,11 +18,21 @@ PATH: the desktop app's binary also runs every command of the headless one (`ser
 
 | Edition | For | How |
 |---|---|---|
-| Desktop app (`sapphire-tally-desktop`) | Everyday use, with the GUI | Installer for Windows, macOS and Linux (in preparation) |
+| Desktop app (`sapphire-tally-desktop`) | Everyday use, with the GUI | Installer for Windows, macOS and Linux |
 | Headless (`sapphire-tally-headless`) | Hosts and servers without a GUI | Install script, cargo-binstall or cargo |
 
 Installing both leaves two `sapphire-tally` commands; `sapphire-tally status` warns
 when the one on PATH is not the one you ran.
+
+### Desktop app: installer
+
+Download the installer for your platform from the [latest release](https://github.com/sapphire-turtle/sapphire-tally/releases/latest):
+`sapphire-tally-desktop-win-Setup.exe` (Windows), `sapphire-tally-desktop-osx-Setup.pkg` (macOS) or
+`sapphire-tally-desktop.AppImage` (Linux). It puts `sapphire-tally` on your `PATH` and keeps itself up to
+date; its first start asks to keep the app server running in the background, for the MCP
+server and HTTP clients while the window is closed. Sync goes through Sapphire Bridge,
+which has an installer of its own on
+[sapphire-framework's latest release](https://github.com/sapphire-turtle/sapphire-framework/releases/latest) (`sapphire-bridge-desktop-*`).
 
 ### Headless: install script
 
@@ -67,7 +77,7 @@ Sync goes through the host's `sapphire-bridge`; without one running, the server 
 
 `sapphire-tally-desktop` lists every activity with a year of its stamps as a GitHub-style heatmap — darker days have more stamps. Click a day to list its stamps, and a stamp to see, edit or delete it; **Stamp now**, **Stamp…**, **New activity** and **Details** add, change and delete records (deleting an activity deletes its stamps, after a confirmation). Settings pick the server's workspace and manage its API keys, and open the Sapphire Bridge window for the workgroup. Like the CLI, the window talks to the running `sapphire-tally` server and never starts one.
 
-Its binary is also the CLI: run bare it opens the window, and with a subcommand (`serve`, `mcp`, `status`, `workspace`, …) it does what `sapphire-tally` does. Its installer (in preparation) puts it on PATH as `sapphire-tally`, so install it instead of the headless edition, not beside it. Until then, the binaries on the [Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) page (`sapphire-tally-desktop-<os>-<arch>`) can be run directly.
+Its binary is also the CLI: run bare it opens the window, and with a subcommand (`serve`, `mcp`, `status`, `workspace`, …) it does what `sapphire-tally` does. Its installer puts it on PATH as `sapphire-tally` and keeps it up to date, so install it instead of the headless edition, not beside it. The bare binaries on the [Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) page (`sapphire-tally-desktop-<os>-<arch>`) can still be run directly.
 
 ```sh
 cargo run -p sapphire-tally-desktop             # the window

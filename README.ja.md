@@ -17,11 +17,21 @@ sapphire-framework上に構築された、GitHub草風ヒートマップ付き�
 
 | 版 | 用途 | 入れ方 |
 |---|---|---|
-| デスクトップ版（`sapphire-tally-desktop`） | GUI を使うふだんの利用 | Windows・macOS・Linux のインストーラー（準備中） |
+| デスクトップ版（`sapphire-tally-desktop`） | GUI を使うふだんの利用 | Windows・macOS・Linux のインストーラー |
 | ヘッドレス版（`sapphire-tally-headless`） | GUI のないホストやサーバー | インストールスクリプト、cargo-binstall、cargo |
 
 両方を入れると `sapphire-tally` が2つになります。PATH 上のものが実行したものと違うときは、
 `sapphire-tally status` が警告します。
+
+### デスクトップ版：インストーラー
+
+[最新のリリース](https://github.com/sapphire-turtle/sapphire-tally/releases/latest)から、お使いの OS のインストーラーをダウンロードしてください。
+Windows は `sapphire-tally-desktop-win-Setup.exe`、macOS は `sapphire-tally-desktop-osx-Setup.pkg`、
+Linux は `sapphire-tally-desktop.AppImage` です。PATH に `sapphire-tally` を置き、自分で最新版に更新します。
+初回の起動時に、ウィンドウを閉じている間も MCP サーバーや HTTP のクライアントが使えるよう、
+アプリサーバーをバックグラウンドで動かし続けるかを尋ねます。同期は Sapphire Bridge を通るので、
+[sapphire-framework の最新のリリース](https://github.com/sapphire-turtle/sapphire-framework/releases/latest)にある Sapphire Bridge のインストーラー
+（`sapphire-bridge-desktop-*`）も入れてください。
 
 ### ヘッドレス版：インストールスクリプト
 
@@ -64,7 +74,7 @@ sapphire-tally mcp                           # stdio経由のMCP（エージェ�
 
 `sapphire-tally-desktop` は、すべての種目を、それぞれの1年分のスタンプをGitHubの草のようなヒートマップ付きで一覧表示します（スタンプが多い日ほど濃い色）。日をクリックするとその日のスタンプ一覧、スタンプをクリックすると詳細表示・編集・削除ができます。**Stamp now**・**Stamp…**・**New activity**・**Details** で記録の追加・変更・削除ができます（種目を削除すると、確認のうえでそのスタンプもすべて削除されます）。設定ではサーバーのワークスペース選択とAPIキーの管理ができ、ワークグループはそこから開くSapphire Bridgeのウィンドウで管理します。CLIと同じく、ウィンドウは動作中の `sapphire-tally` サーバーと通信し、自分でサーバーを起動することはありません。
 
-このバイナリはCLIも兼ねます。引数なしならウィンドウを開き、サブコマンド（`serve`・`mcp`・`status`・`workspace` など）を付ければ `sapphire-tally` と同じ処理をします。インストーラー（準備中）はこれを `sapphire-tally` として PATH に置くので、ヘッドレス版と並べずに、その代わりに入れてください。それまでは [Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) のバイナリ（`sapphire-tally-desktop-<os>-<arch>`）をそのまま実行できます。
+このバイナリはCLIも兼ねます。引数なしならウィンドウを開き、サブコマンド（`serve`・`mcp`・`status`・`workspace` など）を付ければ `sapphire-tally` と同じ処理をします。インストーラーはこれを `sapphire-tally` として PATH に置き、最新版に保つので、ヘッドレス版と並べずに、その代わりに入れてください。[Releases](https://github.com/sapphire-turtle/sapphire-tally/releases) のバイナリ（`sapphire-tally-desktop-<os>-<arch>`）も、そのまま実行できます。
 
 ```sh
 cargo run -p sapphire-tally-desktop             # ウィンドウ
