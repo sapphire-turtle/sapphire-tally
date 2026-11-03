@@ -26,8 +26,8 @@ sapphire-framework上に構築された、GitHub草風ヒートマップ付き�
 ### デスクトップ版：インストーラー
 
 [最新のリリース](https://github.com/sapphire-turtle/sapphire-tally/releases/latest)から、お使いの OS のインストーラーをダウンロードしてください。
-Windows は `sapphire-tally-desktop-win-Setup.exe`、macOS は `sapphire-tally-desktop-osx-Setup.pkg`、
-Linux は `sapphire-tally-desktop.AppImage` です。PATH に `sapphire-tally` を置き、自分で最新版に更新します。
+Windows は `sapphire-tally-desktop_<version>_x64-setup.exe`、macOS は `sapphire-tally-desktop_<version>_aarch64.dmg`、
+Linux は `sapphire-tally-desktop_<version>_x86_64.AppImage` です。PATH に `sapphire-tally` を置き、自分で最新版に更新します。
 初回の起動時に、ウィンドウを閉じている間も MCP サーバーや HTTP のクライアントが使えるよう、
 アプリサーバーをバックグラウンドで動かし続けるかを尋ねます。同期は Sapphire Bridge を通るので、
 [sapphire-framework の最新のリリース](https://github.com/sapphire-turtle/sapphire-framework/releases/latest)にある Sapphire Bridge のインストーラー
