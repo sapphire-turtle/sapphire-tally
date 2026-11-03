@@ -19,4 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- *(deps)* [**breaking**] sapphire-framework 0.24
+- *(deps)* [**breaking**] sapphire-framework 0.26

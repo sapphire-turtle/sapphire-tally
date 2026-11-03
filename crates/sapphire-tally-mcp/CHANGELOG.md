@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- *(deps)* [**breaking**] sapphire-framework 0.24
+- *(deps)* [**breaking**] sapphire-framework 0.26
 
 ## [0.1.0](https://github.com/sapphire-turtle/sapphire-tally/releases/tag/sapphire-tally-mcp-v0.1.0) - 2026-10-25
 

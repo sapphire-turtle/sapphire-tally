@@ -11,28 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(desktop)* [**breaking**] package with cargo-packager instead of Velopack ([#39](https://github.com/sapphire-turtle/sapphire-tally/pull/39))
-- *(desktop)* ship Sapphire Tally as a Velopack package
-- [**breaking**] one desktop binary that runs the CLI too; headless, cli and server crates
-- *(desktop)* list the picked activity's or day's stamps in the side pane
-
-### Fixed
-
-- name each edition's releases, so update installs its own file
-
-### Other
-
-- *(deps)* [**breaking**] sapphire-framework 0.24
-- Merge pull request #24 from sapphire-turtle/docs/app-icon
-- call the shared workflows from sapphire-turtle/.github@v1
-- the filled app icon
-- add the app icon and show it in the README
+- **Breaking:** Sapphire Tally is distributed as an installer per OS, made with cargo-packager ([#39](https://github.com/sapphire-turtle/sapphire-tally/pull/39)): `sapphire-tally-desktop_<version>_x64-setup.exe`, `_aarch64.dmg` and `_x86_64.AppImage`. The installed app updates itself from the latest release, checking each update's signature first.
+- **Breaking:** one desktop binary that runs the CLI too; headless, cli and server crates
+- list the picked activity's or day's stamps in the side pane
+- the app icon
 
 ### Changed
 
 - **Breaking:** sapphire-framework 0.24. HTTP clients (`/mcp`) authenticate with API keys kept in the workspace (`<root>/.sapphire-tally/api_keys/`), managed with `sapphire-tally api-key list|add|retire|restore|rotate` (`external-device` is a hidden alias for this release). Every key has a profile: the workgroup's existing external-device tokens keep working but become **read-only**, so they may call only the reading tools (`activity_list`, `stamp_list`, `heatmap`, …); an agent that stamps needs a new key, `sapphire-tally api-key add <name> --profile read-write`. Update `sapphire-bridge` together with the tally.
 - **Breaking:** the `workgroup`, `device` and `embedding` subcommands are gone: use `sapphire-bridge workgroup|device|embedding`.
 - Settings link to the Sapphire Bridge window for the workgroup, devices and embedding (sapphire-framework 0.24), and gain an API keys page.
+- **Breaking:** sapphire-framework 0.26: `workspace init` and `select` without a directory use the app's default workspace, `<data dir>/workspaces/default`, not the current directory; pass `.` for the old behaviour.
+
+### Fixed
+
+- name each edition's releases, so update installs its own file
 
 ## [0.1.0](https://github.com/sapphire-turtle/sapphire-tally/releases/tag/desktop-v0.1.0) - 2026-10-25
 

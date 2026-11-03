@@ -11,20 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [**breaking**] one desktop binary that runs the CLI too; headless, cli and server crates
-
-### Fixed
-
-- name each edition's releases, so update installs its own file
-
-### Other
-
-- *(deps)* [**breaking**] sapphire-framework 0.24
+- **Breaking:** one desktop binary that runs the CLI too; headless, cli and server crates
 
 ### Changed
 
 - **Breaking:** sapphire-framework 0.24. HTTP clients (`/mcp`) authenticate with API keys kept in the workspace (`<root>/.sapphire-tally/api_keys/`), managed with `sapphire-tally api-key list|add|retire|restore|rotate` (`external-device` is a hidden alias for this release). Every key has a profile: the workgroup's existing external-device tokens keep working but become **read-only**, so they may call only the reading tools (`activity_list`, `stamp_list`, `heatmap`, …); an agent that stamps needs a new key, `sapphire-tally api-key add <name> --profile read-write`. Update `sapphire-bridge` together with the tally.
 - **Breaking:** the `workgroup`, `device` and `embedding` subcommands are gone: use `sapphire-bridge workgroup|device|embedding`.
+- **Breaking:** sapphire-framework 0.26: `workspace init` and `select` without a directory use the app's default workspace, `<data dir>/workspaces/default`, not the current directory; pass `.` for the old behaviour.
+
+### Fixed
+
+- name each edition's releases, so update installs its own file
 
 ## [0.1.0](https://github.com/sapphire-turtle/sapphire-tally/releases/tag/v0.1.0) - 2026-10-25
 
