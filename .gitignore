@@ -23,3 +23,6 @@ target
 .DS_Store
 
 # --- repository specific ---
+
+# The desktop app's icons, rendered for its package (release-packager.yml).
+/desktop/icons/

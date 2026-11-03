@@ -27,8 +27,8 @@ when the one on PATH is not the one you ran.
 ### Desktop app: installer
 
 Download the installer for your platform from the [latest release](https://github.com/sapphire-turtle/sapphire-tally/releases/latest):
-`sapphire-tally-desktop-win-Setup.exe` (Windows), `sapphire-tally-desktop-osx-Setup.pkg` (macOS) or
-`sapphire-tally-desktop.AppImage` (Linux). It puts `sapphire-tally` on your `PATH` and keeps itself up to
+`sapphire-tally-desktop_<version>_x64-setup.exe` (Windows), `sapphire-tally-desktop_<version>_aarch64.dmg` (macOS) or
+`sapphire-tally-desktop_<version>_x86_64.AppImage` (Linux). It puts `sapphire-tally` on your `PATH` and keeps itself up to
 date; its first start asks to keep the app server running in the background, for the MCP
 server and HTTP clients while the window is closed. Sync goes through Sapphire Bridge,
 which has an installer of its own on
