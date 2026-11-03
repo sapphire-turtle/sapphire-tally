@@ -11,7 +11,7 @@ categories = ["command-line-utilities"]
 keywords = ["tracker", "heatmap", "cli", "mcp"]
 
 [dependencies]
-sapphire-tally-core = { path = "../sapphire-tally-core", version = "0.1.0", default-features = false }
+sapphire-tally-core = { path = "../sapphire-tally-core", version = "0.1.1", default-features = false }
 sapphire-tally-server = { path = "../sapphire-tally-server", version = "0.2.0" }
 sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
 anyhow.workspace = true
