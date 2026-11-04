@@ -3,7 +3,7 @@
 # the one command both editions put on PATH; the desktop app is
 # `sapphire-tally-desktop`, and runs the same commands.
 name = "sapphire-tally-headless"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 description.workspace = true
 license.workspace = true
@@ -16,7 +16,7 @@ name = "sapphire-tally"
 path = "src/main.rs"
 
 [dependencies]
-sapphire-tally-cli = { path = "../crates/sapphire-tally-cli", version = "0.2.0" }
+sapphire-tally-cli = { path = "../crates/sapphire-tally-cli", version = "0.2.1" }
 clap.workspace = true
 anyhow.workspace = true
 
