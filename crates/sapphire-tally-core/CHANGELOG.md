@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.1...sapphire-tally-core-v0.1.2) - 2026-11-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.1](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.0...sapphire-tally-core-v0.1.1) - 2026-11-03
 
 ### Other
