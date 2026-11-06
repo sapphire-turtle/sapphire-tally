@@ -1,7 +1,7 @@
 [package]
 name = "sapphire-tally-core"
 edition.workspace = true
-version = "0.1.2"
+version = "0.1.3"
 description.workspace = true
 license.workspace = true
 repository.workspace = true
