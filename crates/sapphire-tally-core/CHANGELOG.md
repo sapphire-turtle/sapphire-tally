@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.2...sapphire-tally-core-v0.1.3) - 2026-11-06
+
+### Changed
+
+- sapphire-framework 0.28 (sapphire-turtle/sapphire-framework#402).
+
 ## [0.1.2](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.1...sapphire-tally-core-v0.1.2) - 2026-11-04
 
 ### Other
