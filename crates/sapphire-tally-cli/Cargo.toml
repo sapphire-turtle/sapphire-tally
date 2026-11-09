@@ -3,7 +3,7 @@ name = "sapphire-tally-cli"
 edition.workspace = true
 # Released together with the two editions that run it, `sapphire-tally-headless`
 # and `sapphire-tally-desktop` (release-plz.toml).
-version = "0.3.0"
+version = "0.3.1"
 description = "The command line of sapphire-tally's two editions, the headless one and the desktop app: the framework's commands, which run the app server or call it"
 license.workspace = true
 repository.workspace = true
@@ -12,7 +12,7 @@ keywords = ["tracker", "heatmap", "cli", "mcp"]
 
 [dependencies]
 sapphire-tally-core = { path = "../sapphire-tally-core", version = "0.1.3", default-features = false }
-sapphire-tally-server = { path = "../sapphire-tally-server", version = "0.3.0" }
+sapphire-tally-server = { path = "../sapphire-tally-server", version = "0.3.1" }
 sapphire-framework = { workspace = true, features = ["server", "ipc", "mcp"] }
 anyhow.workspace = true
 clap.workspace = true

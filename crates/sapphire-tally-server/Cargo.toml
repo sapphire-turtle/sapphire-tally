@@ -2,7 +2,7 @@
 name = "sapphire-tally-server"
 edition.workspace = true
 # Released together with the editions that run it (release-plz.toml).
-version = "0.3.0"
+version = "0.3.1"
 description = "sapphire-tally's app server: the one process that reads and writes the tally, with its sync and MCP methods"
 license.workspace = true
 repository.workspace = true
