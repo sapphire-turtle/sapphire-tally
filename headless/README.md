@@ -12,17 +12,17 @@ the same commands and is put on PATH under the same name.
 
 ```sh
 # Linux, macOS
-curl -fsSL https://raw.githubusercontent.com/sapphire-turtle/sapphire-framework/main/install/install.sh | sh -s -- tally
+curl -fsSL https://raw.githubusercontent.com/sapphire-turtle/sapphire-tally/main/install/install.sh | sh
 ```
 
 ```powershell
 # Windows
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sapphire-turtle/sapphire-framework/main/install/install.ps1))) tally
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sapphire-turtle/sapphire-tally/main/install/install.ps1)))
 ```
 
-This installs `sapphire-tally` together with `sapphire-bridge`, which it syncs through,
-into `~/.local/bin`. See the
-[install script's README](https://github.com/sapphire-turtle/sapphire-framework/tree/main/install) for the options.
+This installs `sapphire-tally` into `~/.local/bin`, after checking the download's SHA-256
+and signature. `sapphire-bridge`, which it syncs through, is installed with
+[sapphire-framework's script](https://github.com/sapphire-turtle/sapphire-framework/tree/main/install).
 
 ### From crates.io
 
