@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone as _};
 use grain_id::GrainId;
-use sapphire_tally_core::{Activity, Goal, Stamp, Unit};
+use sapphire_tally_core::{Activity, Color, Goal, Stamp, Unit};
 use sapphire_tally_mcp::methods::{
     ActivityAddParams, ActivityUpdateParams, StampAddParams, StampUpdateParams,
 };
@@ -114,11 +114,13 @@ impl StampForm {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ActivityForm {
     pub title: String,
     pub unit: Unit,
     pub goal: Goal,
+    /// `None` is drawn in the colour the title hashes to, and never written.
+    pub color: Option<Color>,
     pub description: String,
 }
 
@@ -129,6 +131,7 @@ impl ActivityForm {
             title: activity.title.clone(),
             unit: activity.unit.unwrap_or_default(),
             goal: activity.goal.unwrap_or_default(),
+            color: activity.color,
             description: activity.description.clone().unwrap_or_default(),
         }
     }
@@ -146,7 +149,7 @@ impl ActivityForm {
             title: self.title()?,
             unit: Some(unit_name(self.unit).to_owned()),
             goal: Some(goal_name(self.goal).to_owned()),
-            color: None,
+            color: self.color.map(|c| c.to_string()),
             description: Some(self.description.clone()),
         })
     }
@@ -158,7 +161,8 @@ impl ActivityForm {
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
             goal: Some(goal_name(self.goal).to_owned()),
-            color: None,
+            // Every field, so a colour set back to the default is removed.
+            color: Some(self.color.map(|c| c.to_string()).unwrap_or_default()),
             description: Some(self.description.clone()),
         })
     }
@@ -166,6 +170,8 @@ impl ActivityForm {
 
 #[cfg(test)]
 mod tests {
+    use sapphire_tally_core::Swatch;
+
     use super::*;
 
     fn ts(s: &str) -> DateTime<FixedOffset> {
@@ -244,6 +250,34 @@ mod tests {
                 .goal
                 .as_deref(),
             Some("decrease")
+        );
+    }
+
+    #[test]
+    fn activity_form_sends_its_colour() {
+        let mut form = ActivityForm {
+            title: "筋トレ".into(),
+            ..ActivityForm::default()
+        };
+        assert_eq!(form.to_add_params().unwrap().color, None);
+        assert_eq!(
+            form.to_update_params(id("012atvw"))
+                .unwrap()
+                .color
+                .as_deref(),
+            Some("")
+        );
+        form.color = Some(Color::Swatch(Swatch::Green));
+        assert_eq!(
+            form.to_add_params().unwrap().color.as_deref(),
+            Some("green")
+        );
+        assert_eq!(
+            form.to_update_params(id("012atvw"))
+                .unwrap()
+                .color
+                .as_deref(),
+            Some("green")
         );
     }
 }
