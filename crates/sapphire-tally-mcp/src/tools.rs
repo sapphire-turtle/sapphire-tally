@@ -67,8 +67,10 @@ impl TallyTools {
 impl TallyTools {
     #[tool(
         description = "Create a new activity (tracker). `unit` is an optional display \
-        granularity: day/week/month (default day). `description` is optional Markdown. \
-        Returns the created activity JSON including its id."
+        granularity: day/week/month (default day). `goal` says which way the user wants the \
+        count to move: increase (more is better), decrease (fewer is better) or track (only \
+        counted; the default). `description` is optional Markdown. Returns the created \
+        activity JSON including its id."
     )]
     pub async fn activity_add(
         &self,
@@ -78,7 +80,7 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Show one activity by grain-id: its title, unit and description.",
+        description = "Show one activity by grain-id: its title, unit, goal and description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_get(
@@ -89,8 +91,8 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Change an activity's title, unit or description. Omitted fields stay \
-        as they are; an empty description removes it. Returns the updated activity JSON."
+        description = "Change an activity's title, unit, goal (increase/decrease/track) or \
+        description. Omitted fields stay as they are; an empty description removes it. Returns the updated activity JSON."
     )]
     pub async fn activity_update(
         &self,
@@ -113,8 +115,8 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "List all activities as a JSON array, each with id, title, unit and \
-        description.",
+        description = "List all activities as a JSON array, each with id, title, unit, goal \
+        and description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_list(
@@ -168,7 +170,9 @@ impl TallyTools {
 
     #[tool(
         description = "List stamps as a JSON array, sorted by timestamp ascending. Optional \
-        filters: activity (grain-id), from/to (YYYY-MM-DD, inclusive).",
+        filters: activity (grain-id), from/to (YYYY-MM-DD, inclusive). A stamp records that the activity happened once. Each entry carries the activity's \
+        title and goal: `increase` means more is better, `decrease` means fewer is better, \
+        `track` is only counted.",
         annotations(read_only_hint = true)
     )]
     pub async fn stamp_list(
@@ -181,7 +185,9 @@ impl TallyTools {
     #[tool(
         description = "Heatmap buckets as a JSON array. Buckets use the activity's unit \
         (day/week/month); period format is 2026-09-05 / 2026-W36 / 2026-09. Same filters as \
-        stamp_list. Zero-count periods are omitted.",
+        stamp_list. Zero-count periods are omitted. A stamp records that the activity happened once. Each entry carries the activity's \
+        title and goal: `increase` means more is better, `decrease` means fewer is better, \
+        `track` is only counted.",
         annotations(read_only_hint = true)
     )]
     pub async fn heatmap(&self, Parameters(p): Parameters<QueryParams>) -> Result<String, String> {
@@ -198,7 +204,10 @@ impl ServerHandler for TallyTools {
             "Sapphire Tally records stamps (activity + timestamp + optional Markdown \
              comment) as Markdown files and aggregates them into GitHub-style \
              heatmap buckets. Use activity_list to find an activity's id, stamp_add to \
-             record one, and heatmap to see how often it happened.\n\n{framework}"
+             record one, and heatmap to see how often it happened. A stamp records that the \
+             activity happened once. Each activity has a goal: `increase` means more is \
+             better, `decrease` means fewer is better (a count to cut down, not times \
+             resisted), `track` is only counted.\n\n{framework}"
         ))
     }
 }

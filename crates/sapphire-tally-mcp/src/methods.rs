@@ -9,7 +9,12 @@
 use std::sync::Arc;
 
 use sapphire_framework::ipc::{RequestCtx, Router, RpcError};
-use sapphire_tally_core::{Activity, ActivityUpdate, StampUpdate, Tally, Unit};
+use std::collections::HashMap;
+
+use grain_id::GrainId;
+use sapphire_tally_core::{
+    Activity, ActivityUpdate, Goal, HeatmapBucket, Stamp, StampUpdate, Tally, Unit,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Where a call finds its tally: asked once per call.
@@ -38,7 +43,7 @@ pub mod names {
 /// Bump it when a method's parameters or meaning change incompatibly: a
 /// client built against another version is refused at connect time rather
 /// than mid-call.
-pub const APP_API: u32 = 1;
+pub const APP_API: u32 = 2;
 
 /// Add the tally's methods to the app server's `router`, each resolving the
 /// tally through `source` when it is called.
@@ -141,6 +146,10 @@ pub struct ActivityAddParams {
     /// Display granularity: day/week/month (day when omitted).
     #[serde(default)]
     pub unit: Option<String>,
+    /// increase (more is better), decrease (fewer is better) or track (only
+    /// counted). track when omitted.
+    #[serde(default)]
+    pub goal: Option<String>,
     /// Free Markdown text about the activity.
     #[serde(default)]
     pub description: Option<String>,
@@ -162,6 +171,10 @@ pub struct ActivityUpdateParams {
     /// day/week/month.
     #[serde(default)]
     pub unit: Option<String>,
+    /// increase (more is better), decrease (fewer is better) or track (only
+    /// counted). track when omitted.
+    #[serde(default)]
+    pub goal: Option<String>,
     /// Free Markdown text. An empty string removes it.
     #[serde(default)]
     pub description: Option<String>,
@@ -214,8 +227,28 @@ pub struct StampUpdateParams {
     pub comment: Option<String>,
 }
 
+/// One stamp as `stamp_list` answers it: the stamp, and what its activity
+/// means, so a count is never read without it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StampEntry {
+    #[serde(flatten)]
+    pub stamp: Stamp,
+    pub activity_title: String,
+    pub goal: Goal,
+}
+
+/// One heatmap bucket as `heatmap` answers it, with its activity's title and
+/// goal.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BucketEntry {
+    #[serde(flatten)]
+    pub bucket: HeatmapBucket,
+    pub activity_title: String,
+    pub goal: Goal,
+}
+
 /// The filters `stamp_list` and `heatmap` share.
-#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct QueryParams {
     #[serde(default)]
     pub activity: Option<String>,
@@ -237,7 +270,10 @@ impl TallyMethods {
     pub fn activity_add(&self, p: ActivityAddParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let unit = parse_unit(p.unit.as_deref())?;
-            let a = self.tally.create_activity(&p.title, unit, p.description)?;
+            let goal = parse_goal(p.goal.as_deref())?;
+            let a = self
+                .tally
+                .create_activity(&p.title, unit, goal, p.description)?;
             Ok(serde_json::to_string_pretty(&a)?)
         })()
         .map_err(|e| e.to_string())
@@ -256,6 +292,7 @@ impl TallyMethods {
             let update = ActivityUpdate {
                 title: p.title,
                 unit: parse_unit(p.unit.as_deref())?,
+                goal: parse_goal(p.goal.as_deref())?,
                 description: p.description,
             };
             let a = self.tally.update_activity(parse_id(&p.id)?, update)?;
@@ -327,7 +364,20 @@ impl TallyMethods {
     pub fn stamp_list(&self, p: QueryParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let (activity, from, to) = p.to_filters()?;
-            let list = self.tally.list_stamps(activity, from, to)?;
+            let meanings = self.meanings()?;
+            let list: Vec<StampEntry> = self
+                .tally
+                .list_stamps(activity, from, to)?
+                .into_iter()
+                .filter_map(|stamp| {
+                    let (title, goal) = meanings.get(&stamp.activity)?.clone();
+                    Some(StampEntry {
+                        stamp,
+                        activity_title: title,
+                        goal,
+                    })
+                })
+                .collect();
             Ok(serde_json::to_string_pretty(&list)?)
         })()
         .map_err(|e| e.to_string())
@@ -336,10 +386,37 @@ impl TallyMethods {
     pub fn heatmap(&self, p: QueryParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let (activity, from, to) = p.to_filters()?;
-            let buckets = self.tally.heatmap(activity, from, to)?;
+            let meanings = self.meanings()?;
+            let buckets: Vec<BucketEntry> = self
+                .tally
+                .heatmap(activity, from, to)?
+                .into_iter()
+                .filter_map(|bucket| {
+                    let (title, goal) = meanings.get(&bucket.activity)?.clone();
+                    Some(BucketEntry {
+                        bucket,
+                        activity_title: title,
+                        goal,
+                    })
+                })
+                .collect();
             Ok(serde_json::to_string_pretty(&buckets)?)
         })()
         .map_err(|e| e.to_string())
+    }
+}
+
+impl TallyMethods {
+    /// Each activity's title and resolved goal, by id: what a log entry
+    /// carries. An entry whose activity is missing is left out, as the core
+    /// already leaves out orphan stamps.
+    fn meanings(&self) -> anyhow::Result<HashMap<GrainId, (String, Goal)>> {
+        Ok(self
+            .tally
+            .list_activities()?
+            .into_iter()
+            .map(|a| (a.id, (a.title, a.goal.unwrap_or_default())))
+            .collect())
     }
 }
 
@@ -366,6 +443,11 @@ fn parse_id(s: &str) -> anyhow::Result<grain_id::GrainId> {
 
 fn parse_unit(s: Option<&str>) -> anyhow::Result<Option<Unit>> {
     s.map(|s| Unit::parse_unit(s).map_err(anyhow::Error::msg))
+        .transpose()
+}
+
+fn parse_goal(s: Option<&str>) -> anyhow::Result<Option<Goal>> {
+    s.map(|s| Goal::parse_goal(s).map_err(anyhow::Error::msg))
         .transpose()
 }
 
@@ -404,6 +486,7 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "タピオカミルクティー".into(),
                 unit: Some("week".into()),
+                goal: None,
                 description: None,
             })
             .unwrap();
@@ -448,6 +531,7 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "筋トレ".into(),
                 unit: None,
+                goal: None,
                 description: Some("毎朝".into()),
             })
             .unwrap();
@@ -457,6 +541,7 @@ mod tests {
             .to_string();
         m.activity_update(ActivityUpdateParams {
             id: id.clone(),
+            goal: None,
             unit: Some("month".into()),
             ..Default::default()
         })
@@ -496,6 +581,7 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "筋トレ".into(),
                 unit: None,
+                goal: None,
                 description: None,
             })
             .unwrap();
@@ -557,9 +643,91 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "x".into(),
                 unit: Some("fortnight".into()),
+                goal: None,
                 description: None,
             })
             .unwrap_err();
         assert!(err.contains("fortnight"), "{err}");
+    }
+
+    fn add(m: &TallyMethods, title: &str, goal: Option<&str>) -> String {
+        let v: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: title.into(),
+                unit: None,
+                goal: goal.map(Into::into),
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        v["id"].as_str().unwrap().to_string()
+    }
+
+    fn stamp(m: &TallyMethods, activity: &str) {
+        m.stamp_add(StampAddParams {
+            activity: activity.into(),
+            timestamp: Some("2026-09-05T09:00:00+09:00".into()),
+            comment: None,
+        })
+        .unwrap();
+    }
+
+    fn all() -> QueryParams {
+        QueryParams {
+            activity: None,
+            from: None,
+            to: None,
+        }
+    }
+
+    #[test]
+    fn log_entries_carry_each_activitys_title_and_goal() {
+        let (_dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        let gym = add(&m, "筋トレ", None);
+        stamp(&m, &tea);
+        stamp(&m, &gym);
+        let stamps: Vec<serde_json::Value> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        let heat: Vec<serde_json::Value> =
+            serde_json::from_str(&m.heatmap(all()).unwrap()).unwrap();
+        for entries in [&stamps, &heat] {
+            let of = |id: &str| {
+                entries
+                    .iter()
+                    .find(|e| e["activity"] == id)
+                    .unwrap()
+                    .clone()
+            };
+            assert_eq!(of(&tea)["activity_title"], "タピオカミルクティー");
+            assert_eq!(of(&tea)["goal"], "decrease");
+            assert_eq!(of(&gym)["activity_title"], "筋トレ");
+            assert_eq!(of(&gym)["goal"], "track");
+        }
+    }
+
+    #[test]
+    fn decorated_stamp_list_still_reads_as_stamps() {
+        let (_dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        stamp(&m, &tea);
+        let stamps: Vec<sapphire_tally_core::Stamp> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        assert_eq!(stamps.len(), 1);
+    }
+
+    #[test]
+    fn invalid_goal_returns_tool_error() {
+        let (_dir, m) = methods();
+        let err = m
+            .activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: Some("less".into()),
+                description: None,
+            })
+            .unwrap_err();
+        assert!(err.contains("less"), "{err}");
     }
 }

@@ -1199,6 +1199,7 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "筋トレ".into(),
             unit: None,
+            goal: None,
             description: None,
         };
         let data = Data {

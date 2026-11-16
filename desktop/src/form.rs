@@ -133,6 +133,7 @@ impl ActivityForm {
         Ok(ActivityAddParams {
             title: self.title()?,
             unit: Some(unit_name(self.unit).to_owned()),
+            goal: None,
             description: Some(self.description.clone()),
         })
     }
@@ -143,6 +144,7 @@ impl ActivityForm {
             id: id.to_string(),
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
+            goal: None,
             description: Some(self.description.clone()),
         })
     }
