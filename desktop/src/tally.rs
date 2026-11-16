@@ -808,6 +808,23 @@ impl TallyView {
                             ui.label(form::unit_name(form.unit));
                         }
                         ui.end_row();
+                        ui.label("Goal");
+                        if window.editing {
+                            egui::ComboBox::from_id_salt("activity_goal")
+                                .selected_text(form::goal_name(form.goal))
+                                .show_ui(ui, |ui| {
+                                    for goal in form::GOALS {
+                                        ui.selectable_value(
+                                            &mut form.goal,
+                                            goal,
+                                            form::goal_name(goal),
+                                        );
+                                    }
+                                });
+                        } else {
+                            ui.label(form::goal_name(form.goal));
+                        }
+                        ui.end_row();
                     });
                 ui.label("Description");
                 if window.editing {
