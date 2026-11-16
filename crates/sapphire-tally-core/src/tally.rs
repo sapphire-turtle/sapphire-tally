@@ -8,7 +8,7 @@ use chrono::{DateTime, Datelike, FixedOffset, Local, NaiveDate};
 use grain_id::GrainId;
 
 use crate::error::{Error, Result};
-use crate::model::{Activity, ActivityUpdate, HeatmapBucket, Stamp, StampUpdate, Unit};
+use crate::model::{Activity, ActivityUpdate, Goal, HeatmapBucket, Stamp, StampUpdate, Unit};
 use crate::store;
 
 /// A data directory's root, holding `stamps/` and `activities/` flat.
@@ -30,12 +30,14 @@ impl Tally {
         &self,
         title: &str,
         unit: Option<Unit>,
+        goal: Option<Goal>,
         description: Option<String>,
     ) -> Result<Activity> {
         let activity = Activity {
             id: GrainId::random(),
             title: title.to_string(),
             unit,
+            goal,
             description: description.as_deref().and_then(store::normalize_text),
         };
         store::create_activity(&self.root, &activity)?;
@@ -58,6 +60,9 @@ impl Tally {
         }
         if let Some(unit) = update.unit {
             activity.unit = Some(unit);
+        }
+        if let Some(goal) = update.goal {
+            activity.goal = Some(goal);
         }
         if let Some(description) = update.description {
             activity.description = store::normalize_text(&description);
@@ -289,9 +294,9 @@ mod tests {
     #[test]
     fn create_then_list_activities_sorted_by_title() {
         let (_dir, t) = tally();
-        let b = t.create_activity("筋トレ", None, None).unwrap();
+        let b = t.create_activity("筋トレ", None, None, None).unwrap();
         let a = t
-            .create_activity("タピオカミルクティー", Some(Unit::Week), None)
+            .create_activity("タピオカミルクティー", Some(Unit::Week), None, None)
             .unwrap();
         let list = t.list_activities().unwrap();
         // "タピオカ..." (U+30BF…) < "筋トレ" (U+7B4B…): code point order puts it first
@@ -305,7 +310,7 @@ mod tests {
     #[test]
     fn add_stamp_without_timestamp_uses_now_and_roundtrips() {
         let (_dir, t) = tally();
-        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let a = t.create_activity("筋トレ", None, None, None).unwrap();
         let s = t.add_stamp(a.id, None, Some("30回".into())).unwrap();
         assert_eq!(s.activity, a.id);
         assert!(s.timestamp.timestamp() > 0);
@@ -343,8 +348,8 @@ mod tests {
     #[test]
     fn stamps_filter_by_activity_and_date_range_and_sort_by_timestamp() {
         let (_dir, t) = tally();
-        let a = t.create_activity("タピオカ", None, None).unwrap();
-        let b = t.create_activity("筋トレ", None, None).unwrap();
+        let a = t.create_activity("タピオカ", None, None, None).unwrap();
+        let b = t.create_activity("筋トレ", None, None, None).unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T10:00:00+09:00")), None)
             .unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-04T10:00:00+09:00")), None)
@@ -371,7 +376,7 @@ mod tests {
     fn updates_keep_the_fields_they_leave_out() {
         let (_dir, t) = tally();
         let a = t
-            .create_activity("筋トレ", Some(Unit::Week), Some("腕立て".into()))
+            .create_activity("筋トレ", Some(Unit::Week), None, Some("腕立て".into()))
             .unwrap();
         let a2 = t
             .update_activity(
@@ -420,7 +425,7 @@ mod tests {
     #[test]
     fn a_stamp_cannot_move_to_an_unknown_activity() {
         let (_dir, t) = tally();
-        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let a = t.create_activity("筋トレ", None, None, None).unwrap();
         let s = t.add_stamp(a.id, None, None).unwrap();
         let err = t
             .update_stamp(
@@ -441,7 +446,7 @@ mod tests {
     #[test]
     fn deleting_a_stamp_removes_its_file() {
         let (dir, t) = tally();
-        let a = t.create_activity("筋トレ", None, None).unwrap();
+        let a = t.create_activity("筋トレ", None, None, None).unwrap();
         let s = t.add_stamp(a.id, None, None).unwrap();
         assert_eq!(t.delete_stamp(s.id).unwrap(), s);
         assert!(!store::stamp_path(dir.path(), s.id).exists());
@@ -454,8 +459,8 @@ mod tests {
     #[test]
     fn an_activity_with_stamps_is_deleted_only_with_them() {
         let (dir, t) = tally();
-        let a = t.create_activity("筋トレ", None, None).unwrap();
-        let other = t.create_activity("読書", None, None).unwrap();
+        let a = t.create_activity("筋トレ", None, None, None).unwrap();
+        let other = t.create_activity("読書", None, None, None).unwrap();
         t.add_stamp(a.id, None, None).unwrap();
         t.add_stamp(a.id, None, None).unwrap();
         let kept = t.add_stamp(other.id, None, None).unwrap();
@@ -474,14 +479,14 @@ mod tests {
 
         // An activity without stamps needs no flag.
         assert!(t.delete_activity(other.id, false).is_err());
-        let empty = t.create_activity("空", None, None).unwrap();
+        let empty = t.create_activity("空", None, None, None).unwrap();
         assert!(t.delete_activity(empty.id, false).unwrap().is_empty());
     }
 
     #[test]
     fn heatmap_counts_per_day_by_default() {
         let (_dir, t) = tally();
-        let a = t.create_activity("タピオカ", None, None).unwrap();
+        let a = t.create_activity("タピオカ", None, None, None).unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T09:00:00+09:00")), None)
             .unwrap();
         t.add_stamp(a.id, Some(ts("2026-09-02T21:00:00+09:00")), None)
@@ -499,7 +504,7 @@ mod tests {
     fn heatmap_groups_by_week_and_month_per_activity_unit() {
         let (_dir, t) = tally();
         let a = t
-            .create_activity("週一習慣", Some(Unit::Week), None)
+            .create_activity("週一習慣", Some(Unit::Week), None, None)
             .unwrap();
         // Two stamps inside 2026-W36 (2026-08-31 to 09-06).
         t.add_stamp(a.id, Some(ts("2026-09-01T09:00:00+09:00")), None)
@@ -507,7 +512,7 @@ mod tests {
         t.add_stamp(a.id, Some(ts("2026-09-05T09:00:00+09:00")), None)
             .unwrap();
         let m = t
-            .create_activity("月一習慣", Some(Unit::Month), None)
+            .create_activity("月一習慣", Some(Unit::Month), None, None)
             .unwrap();
         t.add_stamp(m.id, Some(ts("2026-09-15T09:00:00+09:00")), None)
             .unwrap();
@@ -519,5 +524,42 @@ mod tests {
         let month = buckets.iter().find(|b| b.activity == m.id).unwrap();
         assert_eq!(month.period, "2026-09");
         assert_eq!(month.count, 1);
+    }
+
+    #[test]
+    fn goal_roundtrips_and_update_keeps_it_when_left_out() {
+        let (_d, t) = tally();
+        let a = t
+            .create_activity("タピオカ", None, Some(Goal::Decrease), None)
+            .unwrap();
+        assert_eq!(t.get_activity(a.id).unwrap().goal, Some(Goal::Decrease));
+        let renamed = t
+            .update_activity(
+                a.id,
+                ActivityUpdate {
+                    title: Some("タピオカミルクティー".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(renamed.goal, Some(Goal::Decrease));
+        t.update_activity(
+            a.id,
+            ActivityUpdate {
+                goal: Some(Goal::Track),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(t.get_activity(a.id).unwrap().goal, Some(Goal::Track));
+    }
+
+    #[test]
+    fn an_activity_without_goal_writes_no_goal_key() {
+        let (d, t) = tally();
+        let a = t.create_activity("筋トレ", None, None, None).unwrap();
+        let text = std::fs::read_to_string(store::activity_path(d.path(), a.id)).unwrap();
+        assert!(!text.contains("goal"), "{text}");
+        assert_eq!(t.get_activity(a.id).unwrap().goal, None);
     }
 }

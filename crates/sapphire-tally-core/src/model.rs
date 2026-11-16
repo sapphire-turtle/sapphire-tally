@@ -25,6 +25,36 @@ impl Unit {
     }
 }
 
+/// Which way the user wants an activity's count to move. Track (only
+/// counted) by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Goal {
+    /// More is better: a habit to build.
+    Increase,
+    /// Fewer is better: a habit to cut down.
+    Decrease,
+    /// Only counted.
+    #[default]
+    Track,
+}
+
+impl Goal {
+    /// Parse "increase"/"decrease"/"track", ignoring case and surrounding
+    /// whitespace. A bad value is an `Err(String)` naming it, passed to a tool
+    /// error as is.
+    pub fn parse_goal(s: &str) -> Result<Self, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "increase" => Ok(Goal::Increase),
+            "decrease" => Ok(Goal::Decrease),
+            "track" => Ok(Goal::Track),
+            other => Err(format!(
+                "goal must be one of increase/decrease/track, got `{other}`"
+            )),
+        }
+    }
+}
+
 /// An activity (tracker): `activities/<id>.md`.
 ///
 /// Every field but `description` is front matter; `description` is the
@@ -37,6 +67,9 @@ pub struct Activity {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<Unit>,
+    /// `None` reads as [`Goal::Track`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<Goal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -61,6 +94,7 @@ pub struct Stamp {
 pub struct ActivityUpdate {
     pub title: Option<String>,
     pub unit: Option<Unit>,
+    pub goal: Option<Goal>,
     pub description: Option<String>,
 }
 
@@ -90,5 +124,15 @@ mod tests {
         let e = Unit::parse_unit("fortnight").unwrap_err();
         assert!(e.contains("fortnight"), "{e}");
         assert_eq!(Unit::parse_unit("WEEK").unwrap(), Unit::Week);
+    }
+
+    #[test]
+    fn invalid_goal_is_rejected_by_parse_goal() {
+        let e = Goal::parse_goal("less").unwrap_err();
+        assert!(
+            e.contains("less") && e.contains("increase/decrease/track"),
+            "{e}"
+        );
+        assert_eq!(Goal::parse_goal(" Decrease ").unwrap(), Goal::Decrease);
     }
 }
