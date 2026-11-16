@@ -369,13 +369,13 @@ impl TallyMethods {
                 .tally
                 .list_stamps(activity, from, to)?
                 .into_iter()
-                .filter_map(|stamp| {
-                    let (title, goal) = meanings.get(&stamp.activity)?.clone();
-                    Some(StampEntry {
+                .map(|stamp| {
+                    let (activity_title, goal) = meaning(&meanings, stamp.activity);
+                    StampEntry {
                         stamp,
-                        activity_title: title,
+                        activity_title,
                         goal,
-                    })
+                    }
                 })
                 .collect();
             Ok(serde_json::to_string_pretty(&list)?)
@@ -391,13 +391,13 @@ impl TallyMethods {
                 .tally
                 .heatmap(activity, from, to)?
                 .into_iter()
-                .filter_map(|bucket| {
-                    let (title, goal) = meanings.get(&bucket.activity)?.clone();
-                    Some(BucketEntry {
+                .map(|bucket| {
+                    let (activity_title, goal) = meaning(&meanings, bucket.activity);
+                    BucketEntry {
                         bucket,
-                        activity_title: title,
+                        activity_title,
                         goal,
-                    })
+                    }
                 })
                 .collect();
             Ok(serde_json::to_string_pretty(&buckets)?)
@@ -407,9 +407,8 @@ impl TallyMethods {
 }
 
 impl TallyMethods {
-    /// Each activity's title and resolved goal, by id: what a log entry
-    /// carries. An entry whose activity is missing is left out, as the core
-    /// already leaves out orphan stamps.
+    /// Each readable activity's title and resolved goal, by id: what a log
+    /// entry carries. See [`meaning`] for the ones that cannot be read.
     fn meanings(&self) -> anyhow::Result<HashMap<GrainId, (String, Goal)>> {
         Ok(self
             .tally
@@ -418,6 +417,19 @@ impl TallyMethods {
             .map(|a| (a.id, (a.title, a.goal.unwrap_or_default())))
             .collect())
     }
+}
+
+/// The title and goal a log entry for `activity` carries.
+///
+/// An activity whose file exists but cannot be read (a hand edit gone wrong)
+/// is missing from `meanings`; its stamps still count, under the activity's id
+/// as title and `track`, rather than vanishing from the agent's counts. Stamps
+/// of a deleted activity never get here: the core leaves those out.
+fn meaning(meanings: &HashMap<GrainId, (String, Goal)>, activity: GrainId) -> (String, Goal) {
+    meanings
+        .get(&activity)
+        .cloned()
+        .unwrap_or_else(|| (activity.to_string(), Goal::Track))
 }
 
 impl QueryParams {
@@ -729,5 +741,25 @@ mod tests {
             })
             .unwrap_err();
         assert!(err.contains("less"), "{err}");
+    }
+
+    #[test]
+    fn stamps_of_an_unreadable_activity_are_still_counted() {
+        let (dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        stamp(&m, &tea);
+        let path = sapphire_tally_core::store::activity_path(dir.path(), tea.parse().unwrap());
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replace("goal: decrease", "goal: less")).unwrap();
+
+        let stamps: Vec<serde_json::Value> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        let heat: Vec<serde_json::Value> =
+            serde_json::from_str(&m.heatmap(all()).unwrap()).unwrap();
+        for entries in [&stamps, &heat] {
+            assert_eq!(entries.len(), 1, "{entries:?}");
+            assert_eq!(entries[0]["activity_title"], tea.as_str());
+            assert_eq!(entries[0]["goal"], "track");
+        }
     }
 }
