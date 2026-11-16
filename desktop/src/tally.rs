@@ -1217,6 +1217,7 @@ mod tests {
             title: "筋トレ".into(),
             unit: None,
             goal: None,
+            color: None,
             description: None,
         };
         let data = Data {

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use grain_id::GrainId;
 use sapphire_tally_core::{
-    Activity, ActivityUpdate, Goal, HeatmapBucket, Stamp, StampUpdate, Tally, Unit,
+    Activity, ActivityUpdate, Color, Goal, HeatmapBucket, Stamp, StampUpdate, Tally, Unit,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
@@ -150,6 +150,10 @@ pub struct ActivityAddParams {
     /// counted). track when omitted.
     #[serde(default)]
     pub goal: Option<String>,
+    /// A swatch name (green, blue, …) or oklch(C H). On update an empty
+    /// string removes it.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Free Markdown text about the activity.
     #[serde(default)]
     pub description: Option<String>,
@@ -175,6 +179,10 @@ pub struct ActivityUpdateParams {
     /// counted). track when omitted.
     #[serde(default)]
     pub goal: Option<String>,
+    /// A swatch name (green, blue, …) or oklch(C H). On update an empty
+    /// string removes it.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Free Markdown text. An empty string removes it.
     #[serde(default)]
     pub description: Option<String>,
@@ -271,9 +279,10 @@ impl TallyMethods {
         (|| -> anyhow::Result<String> {
             let unit = parse_unit(p.unit.as_deref())?;
             let goal = parse_goal(p.goal.as_deref())?;
+            let color = p.color.as_deref().map(parse_color).transpose()?;
             let a = self
                 .tally
-                .create_activity(&p.title, unit, goal, p.description)?;
+                .create_activity(&p.title, unit, goal, color, p.description)?;
             Ok(serde_json::to_string_pretty(&a)?)
         })()
         .map_err(|e| e.to_string())
@@ -293,6 +302,12 @@ impl TallyMethods {
                 title: p.title,
                 unit: parse_unit(p.unit.as_deref())?,
                 goal: parse_goal(p.goal.as_deref())?,
+                // An empty string removes the colour.
+                color: p
+                    .color
+                    .as_deref()
+                    .map(|c| (!c.trim().is_empty()).then(|| parse_color(c)).transpose())
+                    .transpose()?,
                 description: p.description,
             };
             let a = self.tally.update_activity(parse_id(&p.id)?, update)?;
@@ -458,6 +473,10 @@ fn parse_unit(s: Option<&str>) -> anyhow::Result<Option<Unit>> {
         .transpose()
 }
 
+fn parse_color(s: &str) -> anyhow::Result<Color> {
+    s.parse::<Color>().map_err(anyhow::Error::msg)
+}
+
 fn parse_goal(s: Option<&str>) -> anyhow::Result<Option<Goal>> {
     s.map(|s| Goal::parse_goal(s).map_err(anyhow::Error::msg))
         .transpose()
@@ -499,6 +518,7 @@ mod tests {
                 title: "タピオカミルクティー".into(),
                 unit: Some("week".into()),
                 goal: None,
+                color: None,
                 description: None,
             })
             .unwrap();
@@ -544,6 +564,7 @@ mod tests {
                 title: "筋トレ".into(),
                 unit: None,
                 goal: None,
+                color: None,
                 description: Some("毎朝".into()),
             })
             .unwrap();
@@ -554,6 +575,7 @@ mod tests {
         m.activity_update(ActivityUpdateParams {
             id: id.clone(),
             goal: None,
+            color: None,
             unit: Some("month".into()),
             ..Default::default()
         })
@@ -594,6 +616,7 @@ mod tests {
                 title: "筋トレ".into(),
                 unit: None,
                 goal: None,
+                color: None,
                 description: None,
             })
             .unwrap();
@@ -656,6 +679,7 @@ mod tests {
                 title: "x".into(),
                 unit: Some("fortnight".into()),
                 goal: None,
+                color: None,
                 description: None,
             })
             .unwrap_err();
@@ -668,6 +692,7 @@ mod tests {
                 title: title.into(),
                 unit: None,
                 goal: goal.map(Into::into),
+                color: None,
                 description: None,
             })
             .unwrap(),
@@ -737,6 +762,7 @@ mod tests {
                 title: "x".into(),
                 unit: None,
                 goal: Some("less".into()),
+                color: None,
                 description: None,
             })
             .unwrap_err();
@@ -761,5 +787,56 @@ mod tests {
             assert_eq!(entries[0]["activity_title"], tea.as_str());
             assert_eq!(entries[0]["goal"], "track");
         }
+    }
+
+    fn get(m: &TallyMethods, id: &str) -> serde_json::Value {
+        serde_json::from_str(&m.activity_get(IdParams { id: id.into() }).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn color_is_set_and_cleared_over_mcp() {
+        let (_dir, m) = methods();
+        let created: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: "筋トレ".into(),
+                unit: None,
+                goal: None,
+                color: Some("green".into()),
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(created["color"], "green");
+        let id = created["id"].as_str().unwrap().to_string();
+        let update = |color: Option<&str>| {
+            m.activity_update(ActivityUpdateParams {
+                id: id.clone(),
+                color: color.map(Into::into),
+                ..Default::default()
+            })
+            .unwrap();
+        };
+        update(Some("oklch(0.15 255)"));
+        assert_eq!(get(&m, &id)["color"], "oklch(0.15 255)");
+        update(None);
+        assert_eq!(get(&m, &id)["color"], "oklch(0.15 255)");
+        update(Some(""));
+        assert!(get(&m, &id).get("color").is_none());
+    }
+
+    #[test]
+    fn invalid_color_returns_tool_error() {
+        let (_dir, m) = methods();
+        let err = m
+            .activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: None,
+                color: Some("pink".into()),
+                description: None,
+            })
+            .unwrap_err();
+        assert!(err.contains("pink"), "{err}");
     }
 }

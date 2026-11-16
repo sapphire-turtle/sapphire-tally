@@ -69,8 +69,11 @@ impl TallyTools {
         description = "Create a new activity (tracker). `unit` is an optional display \
         granularity: day/week/month (default day). `goal` says which way the user wants the \
         count to move: increase (more is better), decrease (fewer is better) or track (only \
-        counted; the default). `description` is optional Markdown. Returns the created \
-        activity JSON including its id."
+        counted; the default). `color` is the heatmap colour: a swatch name \
+        (neutral/accent/red/orange/yellow/green/cyan/blue/purple) or oklch(C H) with \
+        0 <= C <= 0.25 and 0 <= H < 360; derived from the title when omitted. \
+        `description` is optional Markdown. Returns the created activity JSON including \
+        its id."
     )]
     pub async fn activity_add(
         &self,
@@ -80,7 +83,7 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Show one activity by grain-id: its title, unit, goal and description.",
+        description = "Show one activity by grain-id: its title, unit, goal, color and description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_get(
@@ -91,8 +94,9 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Change an activity's title, unit, goal (increase/decrease/track) or \
-        description. Omitted fields stay as they are; an empty description removes it. Returns the updated activity JSON."
+        description = "Change an activity's title, unit, goal (increase/decrease/track), \
+        color (a swatch name or oklch(C H)) or description. Omitted fields stay as they are; \
+        an empty color or description removes it. Returns the updated activity JSON."
     )]
     pub async fn activity_update(
         &self,
@@ -115,8 +119,8 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "List all activities as a JSON array, each with id, title, unit, goal \
-        and description.",
+        description = "List all activities as a JSON array, each with id, title, unit, goal, \
+        color and description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_list(

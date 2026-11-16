@@ -99,6 +99,7 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
             title: "practice".into(),
             unit: None,
             goal: None,
+            color: None,
             description: None,
         }))
         .await

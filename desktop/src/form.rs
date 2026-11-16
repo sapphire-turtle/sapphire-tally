@@ -146,6 +146,7 @@ impl ActivityForm {
             title: self.title()?,
             unit: Some(unit_name(self.unit).to_owned()),
             goal: Some(goal_name(self.goal).to_owned()),
+            color: None,
             description: Some(self.description.clone()),
         })
     }
@@ -157,6 +158,7 @@ impl ActivityForm {
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
             goal: Some(goal_name(self.goal).to_owned()),
+            color: None,
             description: Some(self.description.clone()),
         })
     }
