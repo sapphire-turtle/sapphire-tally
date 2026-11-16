@@ -150,8 +150,8 @@ pub struct ActivityAddParams {
     /// counted). track when omitted.
     #[serde(default)]
     pub goal: Option<String>,
-    /// A swatch name (green, blue, …) or oklch(C H). On update an empty
-    /// string removes it.
+    /// A swatch name (green, blue, …) or oklch(C H). Derived from the title
+    /// when omitted or empty.
     #[serde(default)]
     pub color: Option<String>,
     /// Free Markdown text about the activity.
@@ -279,7 +279,13 @@ impl TallyMethods {
         (|| -> anyhow::Result<String> {
             let unit = parse_unit(p.unit.as_deref())?;
             let goal = parse_goal(p.goal.as_deref())?;
-            let color = p.color.as_deref().map(parse_color).transpose()?;
+            // An empty string is no colour, as on update.
+            let color = p
+                .color
+                .as_deref()
+                .filter(|c| !c.trim().is_empty())
+                .map(parse_color)
+                .transpose()?;
             let a = self
                 .tally
                 .create_activity(&p.title, unit, goal, color, p.description)?;
@@ -838,5 +844,22 @@ mod tests {
             })
             .unwrap_err();
         assert!(err.contains("pink"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_color_on_add_means_none() {
+        let (_dir, m) = methods();
+        let created: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: None,
+                color: Some(" ".into()),
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(created.get("color").is_none(), "{created}");
     }
 }

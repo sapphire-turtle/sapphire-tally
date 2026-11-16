@@ -45,21 +45,21 @@ pub fn from_tint(t: Tint) -> Color {
 }
 
 /// The tint an activity is drawn in: its colour, or the one its title hashes
-/// to — the same on every device — when it has none.
+/// to — the same on every device — when it has none. The title is trimmed,
+/// as the form saves it, so saving does not change the colour.
 pub fn tint_of(color: Option<Color>, title: &str) -> Tint {
-    color.map_or_else(|| Tint::from_bytes(title.as_bytes()), to_tint)
+    color.map_or_else(|| Tint::from_bytes(title.trim().as_bytes()), to_tint)
 }
 
 /// A heatmap's shades in `tint`, level 0 (no stamps) to
-/// [`crate::heatmap::LEVELS`].
+/// [`crate::heatmap::LEVELS`]: even steps from an empty cell to the tint at
+/// [`Tone::Muted`], like GitHub's ramp. The theme's own tones bunch up
+/// (Pressed and Border are close), and the top stays clear of the strong text
+/// colour the picked day is outlined in.
 pub fn shades(theme: &Theme, tint: Tint) -> [Color32; 5] {
-    [
-        theme.color(Tone::Raised, GuiSwatch::Neutral),
-        theme.tint(Tone::Pressed, tint),
-        theme.tint(Tone::Border, tint),
-        theme.tint(Tone::Muted, tint),
-        theme.tint(Tone::Text, tint),
-    ]
+    let empty = theme.color(Tone::Raised, GuiSwatch::Neutral);
+    let full = theme.tint(Tone::Muted, tint);
+    std::array::from_fn(|level| empty.lerp_to_gamma(full, level as f32 / 4.0))
 }
 
 #[cfg(test)]
@@ -105,6 +105,40 @@ mod tests {
             for i in 0..s.len() {
                 for j in i + 1..s.len() {
                     assert_ne!(s[i], s[j], "dark={dark} levels {i} and {j}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_titles_surrounding_spaces_do_not_change_its_colour() {
+        assert_eq!(tint_of(None, " 筋トレ "), tint_of(None, "筋トレ"));
+    }
+
+    /// Each step of the ramp is visible: GitHub's greens are 30+ apart.
+    #[test]
+    fn every_step_of_the_ramp_is_visible() {
+        let dist = |a: Color32, b: Color32| {
+            let d = |x: u8, y: u8| (f32::from(x) - f32::from(y)).powi(2);
+            (d(a.r(), b.r()) + d(a.g(), b.g()) + d(a.b(), b.b())).sqrt()
+        };
+        for dark in [false, true] {
+            for contrast in [Contrast::Low, Contrast::Medium, Contrast::High] {
+                let theme = Theme::new(dark, contrast, Tint::Swatch(GuiSwatch::Blue));
+                for tint in [
+                    Tint::Swatch(GuiSwatch::Green),
+                    Tint::Swatch(GuiSwatch::Neutral),
+                    Tint::from_bytes(b"x"),
+                ] {
+                    let s = shades(&theme, tint);
+                    for i in 0..s.len() - 1 {
+                        let step = dist(s[i], s[i + 1]);
+                        assert!(
+                            step >= 20.0,
+                            "dark={dark} {contrast:?} {tint:?}: levels {i}->{} only {step}",
+                            i + 1
+                        );
+                    }
                 }
             }
         }
