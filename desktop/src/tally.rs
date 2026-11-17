@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{Datelike as _, Days, Local, NaiveDate};
 use grain_id::GrainId;
+use sapphire_framework::gui::theme::{self, Tint, TintPicker, Tone};
 use sapphire_framework::gui::{Side, egui, tr};
 use sapphire_tally_core::{Activity, Stamp};
 use sapphire_tally_mcp::methods::{
@@ -23,6 +24,7 @@ use sapphire_tally_mcp::methods::{
 };
 
 use crate::client::TallyClient;
+use crate::color;
 use crate::form::{self, ActivityForm, StampForm};
 use crate::heatmap::{self, Grid};
 
@@ -528,7 +530,8 @@ impl TallyView {
             .picked
             .filter(|p| p.activity == activity.id)
             .and_then(|p| p.day);
-        if let Some(day) = heatmap_ui(ui, self.grid, &counts, picked_day) {
+        let tint = color::tint_of(activity.color, &activity.title);
+        if let Some(day) = heatmap_ui(ui, self.grid, &counts, picked_day, tint) {
             self.picked = Some(Pick::day_clicked(self.picked, activity.id, day));
             side.open();
         }
@@ -808,6 +811,42 @@ impl TallyView {
                             ui.label(form::unit_name(form.unit));
                         }
                         ui.end_row();
+                        ui.label("Goal");
+                        if window.editing {
+                            egui::ComboBox::from_id_salt("activity_goal")
+                                .selected_text(form::goal_name(form.goal))
+                                .show_ui(ui, |ui| {
+                                    for goal in form::GOALS {
+                                        ui.selectable_value(
+                                            &mut form.goal,
+                                            goal,
+                                            form::goal_name(goal),
+                                        );
+                                    }
+                                });
+                        } else {
+                            ui.label(form::goal_name(form.goal));
+                        }
+                        ui.end_row();
+                        ui.label("Color");
+                        let default = Tint::from_bytes(form.title.trim().as_bytes());
+                        if window.editing {
+                            let mut tint = form.color.map(color::to_tint);
+                            // The value follows a drag, so copy it back every frame.
+                            TintPicker::new(&mut tint, default)
+                                .tone(Tone::Muted)
+                                .show(ui);
+                            form.color = tint.map(color::from_tint);
+                        } else {
+                            let tint = color::tint_of(form.color, form.title.trim());
+                            let fill = theme::current(ui.ctx()).tint(Tone::Muted, tint);
+                            let (chip, _) = ui.allocate_exact_size(
+                                egui::vec2(CELL * 2.0, CELL),
+                                egui::Sense::hover(),
+                            );
+                            ui.painter().rect_filled(chip, 2.0, fill);
+                        }
+                        ui.end_row();
                     });
                 ui.label("Description");
                 if window.editing {
@@ -972,9 +1011,10 @@ fn heatmap_ui(
     grid: Grid,
     counts: &BTreeMap<NaiveDate, u32>,
     picked: Option<NaiveDate>,
+    tint: Tint,
 ) -> Option<NaiveDate> {
     let max = counts.values().copied().max().unwrap_or(0);
-    let palette = palette(ui.visuals().dark_mode);
+    let palette = color::shades(&theme::current(ui.ctx()), tint);
     let step = CELL + GAP;
     let size = egui::vec2(LABEL_W + heatmap::WEEKS as f32 * step, LABEL_H + 7.0 * step);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -1044,37 +1084,20 @@ fn heatmap_ui(
     clicked.then_some(hovered_day.map(|(day, _)| day)).flatten()
 }
 
-/// "Less ■■■■■ More".
+/// "Less ■■■■■ More", in grey: every heatmap shares it, each in its own
+/// colour.
 fn legend(ui: &mut egui::Ui) {
     // Laid out right to left: the last swatch first.
     ui.weak("More");
-    for fill in palette(ui.visuals().dark_mode).into_iter().rev() {
+    let neutral = Tint::Swatch(theme::Swatch::Neutral);
+    for fill in color::shades(&theme::current(ui.ctx()), neutral)
+        .into_iter()
+        .rev()
+    {
         let (cell, _) = ui.allocate_exact_size(egui::vec2(CELL, CELL), egui::Sense::hover());
         ui.painter().rect_filled(cell, 2.0, fill);
     }
     ui.weak("Less");
-}
-
-/// GitHub's contribution greens, level 0 (no stamps) to [`heatmap::LEVELS`].
-fn palette(dark: bool) -> [egui::Color32; 5] {
-    let rgb = egui::Color32::from_rgb;
-    if dark {
-        [
-            rgb(0x2d, 0x33, 0x3b),
-            rgb(0x0e, 0x44, 0x29),
-            rgb(0x00, 0x6d, 0x32),
-            rgb(0x26, 0xa6, 0x41),
-            rgb(0x39, 0xd3, 0x53),
-        ]
-    } else {
-        [
-            rgb(0xeb, 0xed, 0xf0),
-            rgb(0x9b, 0xe9, 0xa8),
-            rgb(0x40, 0xc4, 0x63),
-            rgb(0x30, 0xa1, 0x4e),
-            rgb(0x21, 0x6e, 0x39),
-        ]
-    }
 }
 
 /// "a stamp for <activity> at <time>" from the stamp JSON the server
@@ -1199,6 +1222,8 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "筋トレ".into(),
             unit: None,
+            goal: None,
+            color: None,
             description: None,
         };
         let data = Data {

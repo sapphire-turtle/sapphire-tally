@@ -22,6 +22,7 @@
 #![cfg_attr(all(windows, feature = "package"), windows_subsystem = "windows")]
 
 mod client;
+mod color;
 mod form;
 mod heatmap;
 #[cfg(feature = "package")]

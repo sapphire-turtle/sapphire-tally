@@ -9,7 +9,12 @@
 use std::sync::Arc;
 
 use sapphire_framework::ipc::{RequestCtx, Router, RpcError};
-use sapphire_tally_core::{Activity, ActivityUpdate, StampUpdate, Tally, Unit};
+use std::collections::HashMap;
+
+use grain_id::GrainId;
+use sapphire_tally_core::{
+    Activity, ActivityUpdate, Color, Goal, HeatmapBucket, Stamp, StampUpdate, Tally, Unit,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Where a call finds its tally: asked once per call.
@@ -38,7 +43,7 @@ pub mod names {
 /// Bump it when a method's parameters or meaning change incompatibly: a
 /// client built against another version is refused at connect time rather
 /// than mid-call.
-pub const APP_API: u32 = 1;
+pub const APP_API: u32 = 2;
 
 /// Add the tally's methods to the app server's `router`, each resolving the
 /// tally through `source` when it is called.
@@ -141,6 +146,14 @@ pub struct ActivityAddParams {
     /// Display granularity: day/week/month (day when omitted).
     #[serde(default)]
     pub unit: Option<String>,
+    /// increase (more is better), decrease (fewer is better) or track (only
+    /// counted). track when omitted.
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// A swatch name (green, blue, …) or oklch(C H). Derived from the title
+    /// when omitted or empty.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Free Markdown text about the activity.
     #[serde(default)]
     pub description: Option<String>,
@@ -162,6 +175,14 @@ pub struct ActivityUpdateParams {
     /// day/week/month.
     #[serde(default)]
     pub unit: Option<String>,
+    /// increase (more is better), decrease (fewer is better) or track (only
+    /// counted). track when omitted.
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// A swatch name (green, blue, …) or oklch(C H). On update an empty
+    /// string removes it.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Free Markdown text. An empty string removes it.
     #[serde(default)]
     pub description: Option<String>,
@@ -214,8 +235,28 @@ pub struct StampUpdateParams {
     pub comment: Option<String>,
 }
 
+/// One stamp as `stamp_list` answers it: the stamp, and what its activity
+/// means, so a count is never read without it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StampEntry {
+    #[serde(flatten)]
+    pub stamp: Stamp,
+    pub activity_title: String,
+    pub goal: Goal,
+}
+
+/// One heatmap bucket as `heatmap` answers it, with its activity's title and
+/// goal.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BucketEntry {
+    #[serde(flatten)]
+    pub bucket: HeatmapBucket,
+    pub activity_title: String,
+    pub goal: Goal,
+}
+
 /// The filters `stamp_list` and `heatmap` share.
-#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct QueryParams {
     #[serde(default)]
     pub activity: Option<String>,
@@ -237,7 +278,17 @@ impl TallyMethods {
     pub fn activity_add(&self, p: ActivityAddParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let unit = parse_unit(p.unit.as_deref())?;
-            let a = self.tally.create_activity(&p.title, unit, p.description)?;
+            let goal = parse_goal(p.goal.as_deref())?;
+            // An empty string is no colour, as on update.
+            let color = p
+                .color
+                .as_deref()
+                .filter(|c| !c.trim().is_empty())
+                .map(parse_color)
+                .transpose()?;
+            let a = self
+                .tally
+                .create_activity(&p.title, unit, goal, color, p.description)?;
             Ok(serde_json::to_string_pretty(&a)?)
         })()
         .map_err(|e| e.to_string())
@@ -256,6 +307,13 @@ impl TallyMethods {
             let update = ActivityUpdate {
                 title: p.title,
                 unit: parse_unit(p.unit.as_deref())?,
+                goal: parse_goal(p.goal.as_deref())?,
+                // An empty string removes the colour.
+                color: p
+                    .color
+                    .as_deref()
+                    .map(|c| (!c.trim().is_empty()).then(|| parse_color(c)).transpose())
+                    .transpose()?,
                 description: p.description,
             };
             let a = self.tally.update_activity(parse_id(&p.id)?, update)?;
@@ -327,7 +385,20 @@ impl TallyMethods {
     pub fn stamp_list(&self, p: QueryParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let (activity, from, to) = p.to_filters()?;
-            let list = self.tally.list_stamps(activity, from, to)?;
+            let meanings = self.meanings()?;
+            let list: Vec<StampEntry> = self
+                .tally
+                .list_stamps(activity, from, to)?
+                .into_iter()
+                .map(|stamp| {
+                    let (activity_title, goal) = meaning(&meanings, stamp.activity);
+                    StampEntry {
+                        stamp,
+                        activity_title,
+                        goal,
+                    }
+                })
+                .collect();
             Ok(serde_json::to_string_pretty(&list)?)
         })()
         .map_err(|e| e.to_string())
@@ -336,11 +407,50 @@ impl TallyMethods {
     pub fn heatmap(&self, p: QueryParams) -> Result<String, String> {
         (|| -> anyhow::Result<String> {
             let (activity, from, to) = p.to_filters()?;
-            let buckets = self.tally.heatmap(activity, from, to)?;
+            let meanings = self.meanings()?;
+            let buckets: Vec<BucketEntry> = self
+                .tally
+                .heatmap(activity, from, to)?
+                .into_iter()
+                .map(|bucket| {
+                    let (activity_title, goal) = meaning(&meanings, bucket.activity);
+                    BucketEntry {
+                        bucket,
+                        activity_title,
+                        goal,
+                    }
+                })
+                .collect();
             Ok(serde_json::to_string_pretty(&buckets)?)
         })()
         .map_err(|e| e.to_string())
     }
+}
+
+impl TallyMethods {
+    /// Each readable activity's title and resolved goal, by id: what a log
+    /// entry carries. See [`meaning`] for the ones that cannot be read.
+    fn meanings(&self) -> anyhow::Result<HashMap<GrainId, (String, Goal)>> {
+        Ok(self
+            .tally
+            .list_activities()?
+            .into_iter()
+            .map(|a| (a.id, (a.title, a.goal.unwrap_or_default())))
+            .collect())
+    }
+}
+
+/// The title and goal a log entry for `activity` carries.
+///
+/// An activity whose file exists but cannot be read (a hand edit gone wrong)
+/// is missing from `meanings`; its stamps still count, under the activity's id
+/// as title and `track`, rather than vanishing from the agent's counts. Stamps
+/// of a deleted activity never get here: the core leaves those out.
+fn meaning(meanings: &HashMap<GrainId, (String, Goal)>, activity: GrainId) -> (String, Goal) {
+    meanings
+        .get(&activity)
+        .cloned()
+        .unwrap_or_else(|| (activity.to_string(), Goal::Track))
 }
 
 impl QueryParams {
@@ -366,6 +476,15 @@ fn parse_id(s: &str) -> anyhow::Result<grain_id::GrainId> {
 
 fn parse_unit(s: Option<&str>) -> anyhow::Result<Option<Unit>> {
     s.map(|s| Unit::parse_unit(s).map_err(anyhow::Error::msg))
+        .transpose()
+}
+
+fn parse_color(s: &str) -> anyhow::Result<Color> {
+    s.parse::<Color>().map_err(anyhow::Error::msg)
+}
+
+fn parse_goal(s: Option<&str>) -> anyhow::Result<Option<Goal>> {
+    s.map(|s| Goal::parse_goal(s).map_err(anyhow::Error::msg))
         .transpose()
 }
 
@@ -404,6 +523,8 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "タピオカミルクティー".into(),
                 unit: Some("week".into()),
+                goal: None,
+                color: None,
                 description: None,
             })
             .unwrap();
@@ -448,6 +569,8 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "筋トレ".into(),
                 unit: None,
+                goal: None,
+                color: None,
                 description: Some("毎朝".into()),
             })
             .unwrap();
@@ -457,6 +580,8 @@ mod tests {
             .to_string();
         m.activity_update(ActivityUpdateParams {
             id: id.clone(),
+            goal: None,
+            color: None,
             unit: Some("month".into()),
             ..Default::default()
         })
@@ -496,6 +621,8 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "筋トレ".into(),
                 unit: None,
+                goal: None,
+                color: None,
                 description: None,
             })
             .unwrap();
@@ -557,9 +684,182 @@ mod tests {
             .activity_add(ActivityAddParams {
                 title: "x".into(),
                 unit: Some("fortnight".into()),
+                goal: None,
+                color: None,
                 description: None,
             })
             .unwrap_err();
         assert!(err.contains("fortnight"), "{err}");
+    }
+
+    fn add(m: &TallyMethods, title: &str, goal: Option<&str>) -> String {
+        let v: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: title.into(),
+                unit: None,
+                goal: goal.map(Into::into),
+                color: None,
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        v["id"].as_str().unwrap().to_string()
+    }
+
+    fn stamp(m: &TallyMethods, activity: &str) {
+        m.stamp_add(StampAddParams {
+            activity: activity.into(),
+            timestamp: Some("2026-09-05T09:00:00+09:00".into()),
+            comment: None,
+        })
+        .unwrap();
+    }
+
+    fn all() -> QueryParams {
+        QueryParams {
+            activity: None,
+            from: None,
+            to: None,
+        }
+    }
+
+    #[test]
+    fn log_entries_carry_each_activitys_title_and_goal() {
+        let (_dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        let gym = add(&m, "筋トレ", None);
+        stamp(&m, &tea);
+        stamp(&m, &gym);
+        let stamps: Vec<serde_json::Value> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        let heat: Vec<serde_json::Value> =
+            serde_json::from_str(&m.heatmap(all()).unwrap()).unwrap();
+        for entries in [&stamps, &heat] {
+            let of = |id: &str| {
+                entries
+                    .iter()
+                    .find(|e| e["activity"] == id)
+                    .unwrap()
+                    .clone()
+            };
+            assert_eq!(of(&tea)["activity_title"], "タピオカミルクティー");
+            assert_eq!(of(&tea)["goal"], "decrease");
+            assert_eq!(of(&gym)["activity_title"], "筋トレ");
+            assert_eq!(of(&gym)["goal"], "track");
+        }
+    }
+
+    #[test]
+    fn decorated_stamp_list_still_reads_as_stamps() {
+        let (_dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        stamp(&m, &tea);
+        let stamps: Vec<sapphire_tally_core::Stamp> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        assert_eq!(stamps.len(), 1);
+    }
+
+    #[test]
+    fn invalid_goal_returns_tool_error() {
+        let (_dir, m) = methods();
+        let err = m
+            .activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: Some("less".into()),
+                color: None,
+                description: None,
+            })
+            .unwrap_err();
+        assert!(err.contains("less"), "{err}");
+    }
+
+    #[test]
+    fn stamps_of_an_unreadable_activity_are_still_counted() {
+        let (dir, m) = methods();
+        let tea = add(&m, "タピオカミルクティー", Some("decrease"));
+        stamp(&m, &tea);
+        let path = sapphire_tally_core::store::activity_path(dir.path(), tea.parse().unwrap());
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replace("goal: decrease", "goal: less")).unwrap();
+
+        let stamps: Vec<serde_json::Value> =
+            serde_json::from_str(&m.stamp_list(all()).unwrap()).unwrap();
+        let heat: Vec<serde_json::Value> =
+            serde_json::from_str(&m.heatmap(all()).unwrap()).unwrap();
+        for entries in [&stamps, &heat] {
+            assert_eq!(entries.len(), 1, "{entries:?}");
+            assert_eq!(entries[0]["activity_title"], tea.as_str());
+            assert_eq!(entries[0]["goal"], "track");
+        }
+    }
+
+    fn get(m: &TallyMethods, id: &str) -> serde_json::Value {
+        serde_json::from_str(&m.activity_get(IdParams { id: id.into() }).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn color_is_set_and_cleared_over_mcp() {
+        let (_dir, m) = methods();
+        let created: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: "筋トレ".into(),
+                unit: None,
+                goal: None,
+                color: Some("green".into()),
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(created["color"], "green");
+        let id = created["id"].as_str().unwrap().to_string();
+        let update = |color: Option<&str>| {
+            m.activity_update(ActivityUpdateParams {
+                id: id.clone(),
+                color: color.map(Into::into),
+                ..Default::default()
+            })
+            .unwrap();
+        };
+        update(Some("oklch(0.15 255)"));
+        assert_eq!(get(&m, &id)["color"], "oklch(0.15 255)");
+        update(None);
+        assert_eq!(get(&m, &id)["color"], "oklch(0.15 255)");
+        update(Some(""));
+        assert!(get(&m, &id).get("color").is_none());
+    }
+
+    #[test]
+    fn invalid_color_returns_tool_error() {
+        let (_dir, m) = methods();
+        let err = m
+            .activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: None,
+                color: Some("pink".into()),
+                description: None,
+            })
+            .unwrap_err();
+        assert!(err.contains("pink"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_color_on_add_means_none() {
+        let (_dir, m) = methods();
+        let created: serde_json::Value = serde_json::from_str(
+            &m.activity_add(ActivityAddParams {
+                title: "x".into(),
+                unit: None,
+                goal: None,
+                color: Some(" ".into()),
+                description: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(created.get("color").is_none(), "{created}");
     }
 }

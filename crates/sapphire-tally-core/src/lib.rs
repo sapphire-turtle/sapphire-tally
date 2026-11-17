@@ -16,7 +16,9 @@ pub mod store;
 pub mod tally;
 
 pub use error::{Error, Result};
-pub use model::{Activity, ActivityUpdate, HeatmapBucket, Stamp, StampUpdate, Unit};
+pub use model::{
+    Activity, ActivityUpdate, Color, Goal, HeatmapBucket, Stamp, StampUpdate, Swatch, Unit,
+};
 pub use tally::Tally;
 
 /// Process-wide application context, naming the cache, data and config
