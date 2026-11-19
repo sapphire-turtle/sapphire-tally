@@ -813,16 +813,27 @@ impl TallyView {
                         ui.end_row();
                         ui.label("Target");
                         if window.editing {
-                            let mut target = form.target.clone().unwrap_or_default();
-                            if ui.add(egui::TextEdit::singleline(&mut target)).changed() {
-                                form.target = Some(target);
-                            }
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut form.times)
+                                        .desired_width(100.0)
+                                        .hint_text("only counted"),
+                                );
+                                for bound in form::BOUNDS {
+                                    ui.selectable_value(
+                                        &mut form.bound,
+                                        bound,
+                                        form::bound_name(bound),
+                                    );
+                                }
+                            });
                         } else {
                             ui.label(
-                                form.target
-                                    .as_deref()
-                                    .filter(|t| !t.trim().is_empty())
-                                    .unwrap_or("only counted"),
+                                form.target()
+                                    .ok()
+                                    .flatten()
+                                    .map(|t| t.to_string())
+                                    .unwrap_or_else(|| "only counted".to_owned()),
                             );
                         }
                         ui.end_row();
