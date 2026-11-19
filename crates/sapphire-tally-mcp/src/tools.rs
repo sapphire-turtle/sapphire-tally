@@ -66,10 +66,10 @@ impl TallyTools {
 #[tool_router]
 impl TallyTools {
     #[tool(
-        description = "Create a new activity (tracker). `unit` is an optional display \
-        granularity: day/week/month (default day). `goal` says which way the user wants the \
-        count to move: increase (more is better), decrease (fewer is better) or track (only \
-        counted; the default). `color` is the heatmap colour: a swatch name \
+        description = "Create a new activity (tracker). `unit` is the optional \
+        period the count is measured and drawn in: day/week/month (default day). A `target` \
+        is `N-bound`, counted in that unit: `above` for a habit to build, `below` for one \
+        to cut down. An activity without a target is only counted. `color` is the heatmap colour: a swatch name \
         (neutral/accent/red/orange/yellow/green/cyan/blue/purple) or oklch(C H) with \
         0 <= C <= 0.25 and 0 <= H < 360; derived from the title when omitted. \
         `description` is optional Markdown. Returns the created activity JSON including \
@@ -83,7 +83,7 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Show one activity by grain-id: its title, unit, goal, color and description.",
+        description = "Show one activity by grain-id: its title, unit, target, color and description.",
         annotations(read_only_hint = true)
     )]
     pub async fn activity_get(
@@ -94,9 +94,11 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Change an activity's title, unit, goal (increase/decrease/track), \
-        color (a swatch name or oklch(C H)) or description. Omitted fields stay as they are; \
-        an empty color or description removes it. Returns the updated activity JSON."
+        description = "Change an activity's title, unit, target, color (a swatch name or \
+        oklch(C H)) or description. `unit` is the period the count is measured and drawn in. \
+        A target is `N-bound` in that unit: `above` for a habit to build, `below` for one \
+        to cut down; without one the activity is only counted. Omitted fields stay as they \
+        are; an empty target, color or description removes it. Returns the updated activity JSON."
     )]
     pub async fn activity_update(
         &self,
@@ -119,7 +121,7 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "List all activities as a JSON array, each with id, title, unit, goal, \
+        description = "List all activities as a JSON array, each with id, title, unit, target, \
         color and description.",
         annotations(read_only_hint = true)
     )]
@@ -131,7 +133,7 @@ impl TallyTools {
     }
 
     #[tool(
-        description = "Add a stamp. `activity` is the activity's grain-id. `timestamp` is \
+        description = "Add a stamp recording that the activity happened once. `activity` is the activity's grain-id. `timestamp` is \
         optional ISO 8601 with timezone (server time is used when omitted). `comment` is an \
         optional Markdown note."
     )]
@@ -174,9 +176,10 @@ impl TallyTools {
 
     #[tool(
         description = "List stamps as a JSON array, sorted by timestamp ascending. Optional \
-        filters: activity (grain-id), from/to (YYYY-MM-DD, inclusive). A stamp records that the activity happened once. Each entry carries the activity's \
-        title and goal: `increase` means more is better, `decrease` means fewer is better, \
-        `track` is only counted.",
+        filters: activity (grain-id), from/to (YYYY-MM-DD, inclusive). A stamp records that \
+        the activity happened once. Each entry carries the activity's title and optional target. \
+        A target is counted in the activity's unit: `above` is a habit to build, `below` one \
+        to cut down; without a target the activity is only counted.",
         annotations(read_only_hint = true)
     )]
     pub async fn stamp_list(
@@ -189,9 +192,11 @@ impl TallyTools {
     #[tool(
         description = "Heatmap buckets as a JSON array. Buckets use the activity's unit \
         (day/week/month); period format is 2026-09-05 / 2026-W36 / 2026-09. Same filters as \
-        stamp_list. Zero-count periods are omitted. A stamp records that the activity happened once. Each entry carries the activity's \
-        title and goal: `increase` means more is better, `decrease` means fewer is better, \
-        `track` is only counted.",
+        stamp_list. Zero-count periods are omitted. A stamp records that the activity happened \
+        once. Each entry carries the activity's title and optional target, counted in its unit: \
+        `above` is a habit to build, `below` one to cut down; without a target the activity is \
+        only counted. `status` says how the period's count stands against its target: `met`, \
+        `under` (a floor not reached), or `exceeded` (a ceiling passed).",
         annotations(read_only_hint = true)
     )]
     pub async fn heatmap(&self, Parameters(p): Parameters<QueryParams>) -> Result<String, String> {
@@ -209,9 +214,12 @@ impl ServerHandler for TallyTools {
              comment) as Markdown files and aggregates them into GitHub-style \
              heatmap buckets. Use activity_list to find an activity's id, stamp_add to \
              record one, and heatmap to see how often it happened. A stamp records that the \
-             activity happened once. Each activity has a goal: `increase` means more is \
-             better, `decrease` means fewer is better (a count to cut down, not times \
-             resisted), `track` is only counted.\n\n{framework}"
+             activity happened once. The activity's unit is the period the count is measured \
+             and drawn in. A target is `N-bound`, counted in that unit: `above` is a habit \
+             to build, `below` one to cut down (not times resisted). An activity without a \
+             target is only counted. A heatmap entry's status says how the period's count \
+             stands against its target: `met`, `under` (a floor not reached), or `exceeded` \
+             (a ceiling passed).\n\n{framework}"
         ))
     }
 }
@@ -224,6 +232,40 @@ mod tests {
         let endpoint = ipc::Endpoint::in_dir("sapphire-tally", std::env::temp_dir());
         let ctx = ToolContext::dial("sapphire-tally", "0.0.0", None, endpoint);
         TallyTools::new(ctx).tool_router.list_all()
+    }
+
+    #[test]
+    fn descriptions_and_instructions_explain_targets() {
+        let tools = tools();
+        let by_name = |name: &str| tools.iter().find(|t| t.name == name).unwrap();
+        for name in ["activity_add", "activity_update"] {
+            let tool = by_name(name);
+            let schema = serde_json::to_value(&tool.input_schema).unwrap();
+            assert!(schema["properties"].get("target").is_some(), "{schema}");
+            assert!(schema["properties"].get("goal").is_none(), "{schema}");
+            let text = tool.description.as_deref().unwrap();
+            assert!(text.contains("above") && text.contains("below"), "{text}");
+        }
+        let heatmap = by_name("heatmap").description.as_deref().unwrap();
+        for word in ["met", "under", "exceeded", "unit"] {
+            assert!(heatmap.contains(word), "{heatmap}");
+        }
+        let endpoint = ipc::Endpoint::in_dir("sapphire-tally", std::env::temp_dir());
+        let ctx = ToolContext::dial("sapphire-tally", "0.0.0", None, endpoint);
+        let info = TallyTools::new(ctx).get_info();
+        let instructions = info.instructions.unwrap();
+        for word in [
+            "unit",
+            "N-bound",
+            "above",
+            "below",
+            "only counted",
+            "met",
+            "under",
+            "exceeded",
+        ] {
+            assert!(instructions.contains(word), "{instructions}");
+        }
     }
 
     /// Zero-argument tools must advertise a top-level `type: object`, or

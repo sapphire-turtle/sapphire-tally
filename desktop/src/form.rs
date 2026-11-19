@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone as _};
 use grain_id::GrainId;
-use sapphire_tally_core::{Activity, Color, Goal, Stamp, Unit};
+use sapphire_tally_core::{Activity, Color, Stamp, Unit};
 use sapphire_tally_mcp::methods::{
     ActivityAddParams, ActivityUpdateParams, StampAddParams, StampUpdateParams,
 };
@@ -22,16 +22,6 @@ pub fn unit_name(unit: Unit) -> &'static str {
         Unit::Day => "day",
         Unit::Week => "week",
         Unit::Month => "month",
-    }
-}
-
-pub const GOALS: [Goal; 3] = [Goal::Track, Goal::Increase, Goal::Decrease];
-
-pub fn goal_name(goal: Goal) -> &'static str {
-    match goal {
-        Goal::Track => "track",
-        Goal::Increase => "increase",
-        Goal::Decrease => "decrease",
     }
 }
 
@@ -118,7 +108,8 @@ impl StampForm {
 pub struct ActivityForm {
     pub title: String,
     pub unit: Unit,
-    pub goal: Goal,
+    /// The target text, or none when the activity is only counted.
+    pub target: Option<String>,
     /// `None` is drawn in the colour the title hashes to, and never written.
     pub color: Option<Color>,
     pub description: String,
@@ -130,7 +121,7 @@ impl ActivityForm {
         ActivityForm {
             title: activity.title.clone(),
             unit: activity.unit.unwrap_or_default(),
-            goal: activity.goal.unwrap_or_default(),
+            target: activity.target.map(|t| t.to_string()),
             color: activity.color,
             description: activity.description.clone().unwrap_or_default(),
         }
@@ -148,7 +139,7 @@ impl ActivityForm {
         Ok(ActivityAddParams {
             title: self.title()?,
             unit: Some(unit_name(self.unit).to_owned()),
-            goal: Some(goal_name(self.goal).to_owned()),
+            target: self.target.clone(),
             color: self.color.map(|c| c.to_string()),
             description: Some(self.description.clone()),
         })
@@ -160,7 +151,7 @@ impl ActivityForm {
             id: id.to_string(),
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
-            goal: Some(goal_name(self.goal).to_owned()),
+            target: Some(self.target.clone().unwrap_or_default()),
             // Every field, so a colour set back to the default is removed.
             color: Some(self.color.map(|c| c.to_string()).unwrap_or_default()),
             description: Some(self.description.clone()),
@@ -237,19 +228,42 @@ mod tests {
     }
 
     #[test]
-    fn activity_form_sends_its_goal() {
+    fn activity_form_sends_its_target() {
         let mut form = ActivityForm {
             title: "タピオカ".into(),
             ..ActivityForm::default()
         };
-        assert_eq!(form.to_add_params().unwrap().goal.as_deref(), Some("track"));
-        form.goal = Goal::Decrease;
+        assert_eq!(form.to_add_params().unwrap().target, None);
         assert_eq!(
             form.to_update_params(id("012atvw"))
                 .unwrap()
-                .goal
+                .target
                 .as_deref(),
-            Some("decrease")
+            Some("")
+        );
+        form.target = Some("3-below".into());
+        assert_eq!(
+            form.to_add_params().unwrap().target.as_deref(),
+            Some("3-below")
+        );
+        assert_eq!(
+            form.to_update_params(id("012atvw"))
+                .unwrap()
+                .target
+                .as_deref(),
+            Some("3-below")
+        );
+        let activity = Activity {
+            id: id("012atvw"),
+            title: "タピオカ".into(),
+            unit: None,
+            target: Some("3-below".parse().unwrap()),
+            color: None,
+            description: None,
+        };
+        assert_eq!(
+            ActivityForm::edit(&activity).target.as_deref(),
+            Some("3-below")
         );
     }
 

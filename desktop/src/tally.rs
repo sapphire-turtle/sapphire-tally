@@ -811,21 +811,18 @@ impl TallyView {
                             ui.label(form::unit_name(form.unit));
                         }
                         ui.end_row();
-                        ui.label("Goal");
+                        ui.label("Target");
                         if window.editing {
-                            egui::ComboBox::from_id_salt("activity_goal")
-                                .selected_text(form::goal_name(form.goal))
-                                .show_ui(ui, |ui| {
-                                    for goal in form::GOALS {
-                                        ui.selectable_value(
-                                            &mut form.goal,
-                                            goal,
-                                            form::goal_name(goal),
-                                        );
-                                    }
-                                });
+                            ui.add(egui::TextEdit::singleline(
+                                form.target.get_or_insert_with(String::new),
+                            ));
                         } else {
-                            ui.label(form::goal_name(form.goal));
+                            ui.label(
+                                form.target
+                                    .as_deref()
+                                    .filter(|t| !t.trim().is_empty())
+                                    .unwrap_or("only counted"),
+                            );
                         }
                         ui.end_row();
                         ui.label("Color");
@@ -1222,7 +1219,7 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "筋トレ".into(),
             unit: None,
-            goal: None,
+            target: None,
             color: None,
             description: None,
         };
