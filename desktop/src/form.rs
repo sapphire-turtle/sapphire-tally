@@ -151,7 +151,7 @@ impl ActivityForm {
             id: id.to_string(),
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
-            target: Some(self.target.clone().unwrap_or_default()),
+            target: self.target.clone(),
             // Every field, so a colour set back to the default is removed.
             color: Some(self.color.map(|c| c.to_string()).unwrap_or_default()),
             description: Some(self.description.clone()),
@@ -234,6 +234,8 @@ mod tests {
             ..ActivityForm::default()
         };
         assert_eq!(form.to_add_params().unwrap().target, None);
+        assert_eq!(form.to_update_params(id("012atvw")).unwrap().target, None);
+        form.target = Some(String::new());
         assert_eq!(
             form.to_update_params(id("012atvw"))
                 .unwrap()

@@ -813,9 +813,10 @@ impl TallyView {
                         ui.end_row();
                         ui.label("Target");
                         if window.editing {
-                            ui.add(egui::TextEdit::singleline(
-                                form.target.get_or_insert_with(String::new),
-                            ));
+                            let mut target = form.target.clone().unwrap_or_default();
+                            if ui.add(egui::TextEdit::singleline(&mut target)).changed() {
+                                form.target = Some(target);
+                            }
                         } else {
                             ui.label(
                                 form.target

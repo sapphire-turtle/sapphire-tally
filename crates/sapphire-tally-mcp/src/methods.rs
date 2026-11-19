@@ -171,10 +171,10 @@ pub struct ActivityUpdateParams {
     pub id: String,
     #[serde(default)]
     pub title: Option<String>,
-    /// day/week/month.
+    /// Period the count is measured and drawn in: day/week/month.
     #[serde(default)]
     pub unit: Option<String>,
-    /// The activity's target, as `N-bound`: `3-below` is a habit cut to at most 3 its unit. Omitted means only counted. An empty string removes it.
+    /// The activity's target, as `N-bound`: `3-below` is a habit cut to at most 3 its unit. Omitted leaves it as it is. An empty string removes it.
     #[serde(default)]
     pub target: Option<String>,
     /// A swatch name (green, blue, …) or oklch(C H). On update an empty
@@ -879,6 +879,7 @@ mod tests {
         .unwrap();
         assert!(created.get("color").is_none(), "{created}");
     }
+
     #[test]
     fn a_heatmap_bucket_carries_a_target_and_how_its_count_reads_against_it() {
         let (_dir, m) = methods();
