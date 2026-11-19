@@ -15,7 +15,7 @@ redb-store = ["sapphire-tally-core/redb-store"]
 sapphire-tally-core = { path = "../sapphire-tally-core", version = "0.1.3", default-features = false }
 sapphire-framework = { workspace = true, features = ["ipc", "mcp"] }
 anyhow.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 grain-id.workspace = true
 rmcp.workspace = true
 schemars.workspace = true

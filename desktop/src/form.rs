@@ -4,16 +4,21 @@
 //! Kept free of egui so the rules are testable. The server checks everything
 //! again; these checks only let the window say what is wrong before sending.
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone as _};
 use grain_id::GrainId;
-use sapphire_tally_core::{Activity, Bound, Color, Stamp, Target, Unit};
+use jiff::Timestamp;
+use sapphire_tally_core::{Activity, Bound, Color, Stamp, Target, Unit, time};
 use sapphire_tally_mcp::methods::{
     ActivityAddParams, ActivityUpdateParams, StampAddParams, StampUpdateParams,
 };
 
-/// How the form shows and reads a stamp's time: minutes, in the stamp's own
-/// offset. A full RFC 3339 timestamp is accepted too.
+/// How the form shows and reads a stamp's time: minutes, in this host's time
+/// zone. A full RFC 3339 timestamp is accepted too.
 pub const TIME_FORMAT: &str = "%Y-%m-%d %H:%M";
+
+/// `timestamp` as the form shows it.
+pub fn shown(timestamp: Timestamp) -> String {
+    time::local(timestamp).strftime(TIME_FORMAT).to_string()
+}
 
 pub const UNITS: [Unit; 3] = [Unit::Day, Unit::Week, Unit::Month];
 pub const BOUNDS: [Bound; 2] = [Bound::Above, Bound::Below];
@@ -36,21 +41,18 @@ pub struct StampForm {
     /// [`TIME_FORMAT`], or RFC 3339.
     pub when: String,
     pub comment: String,
-    /// The offset a time without one is read in.
-    offset: FixedOffset,
     /// The stamp's time as stored, kept when `when` is left as shown: the
     /// form shows minutes, and saving a comment must not drop the seconds.
-    original: Option<DateTime<FixedOffset>>,
+    original: Option<Timestamp>,
 }
 
 impl StampForm {
     /// An empty form for a new stamp at `now`.
-    pub fn new(activity: Option<GrainId>, now: DateTime<FixedOffset>) -> StampForm {
+    pub fn new(activity: Option<GrainId>, now: Timestamp) -> StampForm {
         StampForm {
             activity,
-            when: now.format(TIME_FORMAT).to_string(),
+            when: shown(now),
             comment: String::new(),
-            offset: *now.offset(),
             original: None,
         }
     }
@@ -59,30 +61,23 @@ impl StampForm {
     pub fn edit(stamp: &Stamp) -> StampForm {
         StampForm {
             activity: Some(stamp.activity),
-            when: stamp.timestamp.format(TIME_FORMAT).to_string(),
+            when: shown(stamp.timestamp),
             comment: stamp.comment.clone().unwrap_or_default(),
-            offset: *stamp.timestamp.offset(),
             original: Some(stamp.timestamp),
         }
     }
 
-    pub fn timestamp(&self) -> Result<DateTime<FixedOffset>, String> {
+    /// The time in the form: [`TIME_FORMAT`] or RFC 3339, a time without an
+    /// offset in this host's time zone.
+    pub fn timestamp(&self) -> Result<Timestamp, String> {
         let text = self.when.trim();
         if let Some(original) = self.original
-            && text == original.format(TIME_FORMAT).to_string()
+            && text == shown(original)
         {
             return Ok(original);
         }
-        if let Ok(ts) = DateTime::parse_from_rfc3339(text) {
-            return Ok(ts);
-        }
-        let naive = NaiveDateTime::parse_from_str(text, TIME_FORMAT)
-            .or_else(|_| NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S"))
-            .map_err(|_| format!("the time must look like 2026-09-05 09:12, got `{text}`"))?;
-        self.offset
-            .from_local_datetime(&naive)
-            .single()
-            .ok_or_else(|| format!("`{text}` is not a time in {}", self.offset))
+        time::parse(text)
+            .map_err(|_| format!("the time must look like 2026-09-05 09:12, got `{text}`"))
     }
 
     fn activity(&self) -> Result<GrainId, String> {
@@ -93,7 +88,7 @@ impl StampForm {
     pub fn to_add_params(&self) -> Result<StampAddParams, String> {
         Ok(StampAddParams {
             activity: self.activity()?.to_string(),
-            timestamp: Some(self.timestamp()?.to_rfc3339()),
+            timestamp: Some(time::format(self.timestamp()?)),
             comment: Some(self.comment.clone()),
         })
     }
@@ -103,7 +98,7 @@ impl StampForm {
         Ok(StampUpdateParams {
             id: id.to_string(),
             activity: Some(self.activity()?.to_string()),
-            timestamp: Some(self.timestamp()?.to_rfc3339()),
+            timestamp: Some(time::format(self.timestamp()?)),
             comment: Some(self.comment.clone()),
         })
     }
@@ -189,8 +184,8 @@ mod tests {
 
     use super::*;
 
-    fn ts(s: &str) -> DateTime<FixedOffset> {
-        DateTime::parse_from_rfc3339(s).unwrap()
+    fn ts(s: &str) -> Timestamp {
+        time::parse(s).unwrap()
     }
 
     fn id(s: &str) -> GrainId {
@@ -198,12 +193,13 @@ mod tests {
     }
 
     #[test]
-    fn a_new_stamp_reads_its_time_in_the_local_offset() {
-        let mut form = StampForm::new(Some(id("012atvw")), ts("2026-09-05T09:12:34+09:00"));
+    fn a_new_stamp_reads_its_time_in_the_local_time_zone() {
+        let mut form = StampForm::new(Some(id("012atvw")), ts("2026-09-05T09:12:34"));
         assert_eq!(form.when, "2026-09-05 09:12");
         form.when = "2026-09-04 21:00".into();
         let p = form.to_add_params().unwrap();
-        assert_eq!(p.timestamp.as_deref(), Some("2026-09-04T21:00:00+09:00"));
+        let want = time::format(ts("2026-09-04T21:00:00"));
+        assert_eq!(p.timestamp.as_deref(), Some(want.as_str()));
         assert_eq!(p.activity, "012atvw");
     }
 
@@ -218,12 +214,12 @@ mod tests {
         let mut form = StampForm::edit(&stamp);
         form.comment.clear();
         let p = form.to_update_params(stamp.id).unwrap();
-        assert_eq!(p.timestamp, Some(stamp.timestamp.to_rfc3339()));
+        assert_eq!(p.timestamp, Some(time::format(stamp.timestamp)));
         assert_eq!(p.comment.as_deref(), Some(""));
 
-        // A changed time is read in the stamp's own offset.
+        // A changed time is read in this host's time zone.
         form.when = "2026-09-05 10:00".into();
-        assert_eq!(form.timestamp().unwrap(), ts("2026-09-05T10:00:00+02:00"));
+        assert_eq!(form.timestamp().unwrap(), ts("2026-09-05T10:00:00"));
     }
 
     #[test]

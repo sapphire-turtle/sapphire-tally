@@ -7,8 +7,9 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{Datelike as _, Days, NaiveDate};
 use grain_id::GrainId;
+use jiff::ToSpan;
+use jiff::civil::Date;
 use sapphire_tally_core::Stamp;
 
 /// How many weeks the grid shows: a year, like GitHub's.
@@ -21,38 +22,40 @@ pub const LEVELS: u8 = 4;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Grid {
     /// The Monday of the first column.
-    pub start: NaiveDate,
+    pub start: Date,
     /// The last day shown: the grid stops there, mid-column.
-    pub end: NaiveDate,
+    pub end: Date,
 }
 
 impl Grid {
     /// [`WEEKS`] columns, the last one holding `end`.
-    pub fn ending(end: NaiveDate) -> Grid {
-        let monday = end - Days::new(u64::from(end.weekday().num_days_from_monday()));
+    pub fn ending(end: Date) -> Grid {
+        let monday = end - i64::from(end.weekday().to_monday_zero_offset()).days();
         Grid {
-            start: monday - Days::new((WEEKS - 1) * 7),
+            start: monday - ((WEEKS as i64 - 1) * 7).days(),
             end,
         }
     }
 
     /// The day at `week` (column) and `weekday` (row, Monday = 0), or `None`
     /// past [`Grid::end`].
-    pub fn day(&self, week: u64, weekday: u64) -> Option<NaiveDate> {
-        let day = self.start + Days::new(week * 7 + weekday);
+    pub fn day(&self, week: u64, weekday: u64) -> Option<Date> {
+        let day = self.start + ((week * 7 + weekday) as i64).days();
         (day <= self.end).then_some(day)
     }
 }
 
-/// Stamps per day (each in its own offset, as the server counts them),
+/// Stamps per day (in this host's time zone, as the server counts them),
 /// optionally for one activity.
-pub fn day_counts(stamps: &[Stamp], activity: Option<GrainId>) -> BTreeMap<NaiveDate, u32> {
+pub fn day_counts(stamps: &[Stamp], activity: Option<GrainId>) -> BTreeMap<Date, u32> {
     let mut counts = BTreeMap::new();
     for stamp in stamps {
         if activity.is_some_and(|a| a != stamp.activity) {
             continue;
         }
-        *counts.entry(stamp.timestamp.date_naive()).or_insert(0) += 1;
+        *counts
+            .entry(sapphire_tally_core::time::local_date(stamp.timestamp))
+            .or_insert(0) += 1;
     }
     counts
 }
@@ -68,19 +71,17 @@ pub fn level(count: u32, max: u32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
-
     use super::*;
 
-    fn date(s: &str) -> NaiveDate {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    fn date(s: &str) -> Date {
+        s.parse().unwrap()
     }
 
     #[test]
     fn the_grid_starts_on_a_monday_a_year_back() {
         // 2026-10-13 is a Tuesday.
         let grid = Grid::ending(date("2026-10-13"));
-        assert_eq!(grid.start.weekday(), chrono::Weekday::Mon);
+        assert_eq!(grid.start.weekday(), jiff::civil::Weekday::Monday);
         assert_eq!(grid.start, date("2025-10-13"));
         assert_eq!(grid.day(52, 0), Some(date("2026-10-12")));
         assert_eq!(grid.day(52, 1), Some(date("2026-10-13")));
@@ -88,18 +89,18 @@ mod tests {
     }
 
     #[test]
-    fn days_count_in_the_stamps_own_offset() {
+    fn days_count_in_the_local_time_zone() {
         let stamp = |activity: &str, ts: &str| Stamp {
             id: GrainId::random(),
             activity: activity.parse().unwrap(),
-            timestamp: DateTime::parse_from_rfc3339(ts).unwrap(),
+            timestamp: sapphire_tally_core::time::parse(ts).unwrap(),
             comment: None,
         };
         let stamps = [
-            stamp("012atvw", "2026-09-05T23:30:00+09:00"),
-            stamp("012atvw", "2026-09-05T08:00:00+09:00"),
-            stamp("012atvx", "2026-09-05T12:00:00+09:00"),
-            stamp("012atvw", "2026-09-06T00:10:00+09:00"),
+            stamp("012atvw", "2026-09-05T23:30:00"),
+            stamp("012atvw", "2026-09-05T08:00:00"),
+            stamp("012atvx", "2026-09-05T12:00:00"),
+            stamp("012atvw", "2026-09-06T00:10:00"),
         ];
         let all = day_counts(&stamps, None);
         assert_eq!(all[&date("2026-09-05")], 3);

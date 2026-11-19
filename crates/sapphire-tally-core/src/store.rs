@@ -15,8 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, FixedOffset};
 use grain_id::GrainId;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -49,7 +49,8 @@ struct ActivityFront {
 struct StampFront {
     id: GrainId,
     activity: GrainId,
-    timestamp: DateTime<FixedOffset>,
+    #[serde(with = "crate::time::rfc3339")]
+    timestamp: Timestamp,
 }
 
 pub fn read_activity(root: &Path, id: GrainId) -> Result<Activity> {
@@ -176,8 +177,8 @@ pub fn normalize_text(text: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn ts(s: &str) -> DateTime<FixedOffset> {
-        DateTime::parse_from_rfc3339(s).unwrap()
+    fn ts(s: &str) -> Timestamp {
+        s.parse().unwrap()
     }
 
     #[test]

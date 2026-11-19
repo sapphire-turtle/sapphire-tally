@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The stamp form shows and reads times in this host's time zone, so a time typed across a DST change lands where it says; the heatmap's days are this host's too.
+- sapphire-framework 0.29, corundum-framework 0.13.
+
 ## [0.3.0](https://github.com/sapphire-turtle/sapphire-tally/compare/v0.2.1...v0.3.0) - 2026-11-06
 
 ### Added

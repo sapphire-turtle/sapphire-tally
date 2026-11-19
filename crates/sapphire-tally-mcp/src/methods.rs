@@ -476,8 +476,8 @@ impl QueryParams {
         &self,
     ) -> anyhow::Result<(
         Option<grain_id::GrainId>,
-        Option<chrono::NaiveDate>,
-        Option<chrono::NaiveDate>,
+        Option<jiff::civil::Date>,
+        Option<jiff::civil::Date>,
     )> {
         let activity = self.activity.as_deref().map(parse_id).transpose()?;
         let from = parse_date(self.from.as_deref(), "from")?;
@@ -504,19 +504,16 @@ fn parse_target(s: &str) -> anyhow::Result<Target> {
     s.parse::<Target>().map_err(anyhow::Error::msg)
 }
 
-fn parse_timestamp(
-    s: Option<&str>,
-) -> anyhow::Result<Option<chrono::DateTime<chrono::FixedOffset>>> {
+fn parse_timestamp(s: Option<&str>) -> anyhow::Result<Option<jiff::Timestamp>> {
     s.map(|s| {
-        chrono::DateTime::parse_from_rfc3339(s)
-            .map_err(|e| anyhow::anyhow!("invalid timestamp: {e}"))
+        sapphire_tally_core::time::parse(s).map_err(|e| anyhow::anyhow!("invalid timestamp: {e}"))
     })
     .transpose()
 }
 
-fn parse_date(s: Option<&str>, field: &str) -> anyhow::Result<Option<chrono::NaiveDate>> {
+fn parse_date(s: Option<&str>, field: &str) -> anyhow::Result<Option<jiff::civil::Date>> {
     s.map(|s| {
-        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        s.parse::<jiff::civil::Date>()
             .map_err(|e| anyhow::anyhow!("invalid {field} date: {e}"))
     })
     .transpose()
