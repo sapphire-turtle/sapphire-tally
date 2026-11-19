@@ -98,7 +98,7 @@ sapphire-tally/
 
 ## データ形式
 
-- `<workspace>/activities/<grain-id>.md` — 種目。フロントマターに`title`（必須）と`unit`（任意: day/week/month）、本文に説明
+- `<workspace>/activities/<grain-id>.md` — 種目。フロントマターに`title`（必須）、`unit`（任意: day/week/month。スタンプを数えて表示する期間）、`target`（任意: `times`と`bound`。テキストでは`3-below`のように`N-bound`と表記）、本文に説明
 - `<workspace>/stamps/<grain-id>.md` — スタンプ。フロントマターに`activity`と`timestamp`、本文にコメント
 - ファイル名はgrain-id（7文字BASE32）。ファイル内にもidフィールドを持つが、ファイル名が正
 

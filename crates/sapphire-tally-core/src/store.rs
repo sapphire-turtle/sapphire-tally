@@ -20,7 +20,7 @@ use grain_id::GrainId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::model::{Activity, Color, Goal, Stamp, Unit};
+use crate::model::{Activity, Color, Stamp, Target, Unit};
 
 /// The extension every record file has.
 pub const EXTENSION: &str = "md";
@@ -40,7 +40,7 @@ struct ActivityFront {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     unit: Option<Unit>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    goal: Option<Goal>,
+    target: Option<Target>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     color: Option<Color>,
 }
@@ -67,7 +67,7 @@ pub fn read_activity(root: &Path, id: GrainId) -> Result<Activity> {
         id,
         title: front.title,
         unit: front.unit,
-        goal: front.goal,
+        target: front.target,
         color: front.color,
         description: body,
     })
@@ -125,7 +125,7 @@ fn activity_text(a: &Activity) -> Result<String> {
         id: a.id,
         title: a.title.clone(),
         unit: a.unit,
-        goal: a.goal,
+        target: a.target,
         color: a.color,
     };
     render(&front, a.description.as_deref())
@@ -210,7 +210,7 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "タピオカミルクティー".into(),
             unit: Some(Unit::Week),
-            goal: None,
+            target: None,
             color: None,
             description: None,
         };
@@ -245,7 +245,7 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "x".into(),
             unit: None,
-            goal: None,
+            target: None,
             color: None,
             description: None,
         };

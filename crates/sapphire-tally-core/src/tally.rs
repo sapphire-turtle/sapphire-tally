@@ -9,7 +9,7 @@ use grain_id::GrainId;
 
 use crate::error::{Error, Result};
 use crate::model::{
-    Activity, ActivityUpdate, Color, Goal, HeatmapBucket, Stamp, StampUpdate, Unit,
+    Activity, ActivityUpdate, Color, HeatmapBucket, Stamp, StampUpdate, Target, Unit,
 };
 use crate::store;
 
@@ -32,7 +32,7 @@ impl Tally {
         &self,
         title: &str,
         unit: Option<Unit>,
-        goal: Option<Goal>,
+        target: Option<Target>,
         color: Option<Color>,
         description: Option<String>,
     ) -> Result<Activity> {
@@ -40,7 +40,7 @@ impl Tally {
             id: GrainId::random(),
             title: title.to_string(),
             unit,
-            goal,
+            target,
             color,
             description: description.as_deref().and_then(store::normalize_text),
         };
@@ -65,8 +65,8 @@ impl Tally {
         if let Some(unit) = update.unit {
             activity.unit = Some(unit);
         }
-        if let Some(goal) = update.goal {
-            activity.goal = Some(goal);
+        if let Some(target) = update.target {
+            activity.target = target;
         }
         if let Some(color) = update.color {
             activity.color = color;
@@ -280,6 +280,7 @@ fn record_ids(dir: &Path) -> Result<Vec<GrainId>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Bound;
 
     fn tally() -> (tempfile::TempDir, Tally) {
         let dir = tempfile::tempdir().unwrap();
@@ -544,40 +545,55 @@ mod tests {
     }
 
     #[test]
-    fn goal_roundtrips_and_update_keeps_it_when_left_out() {
-        let (_d, t) = tally();
+    fn a_target_writes_reads_back_and_survives_an_update() {
+        let (dir, t) = tally();
         let a = t
-            .create_activity("タピオカ", None, Some(Goal::Decrease), None, None)
+            .create_activity(
+                "タピオカミルクティー",
+                None,
+                Some(Target {
+                    times: 3,
+                    bound: Bound::Below,
+                }),
+                None,
+                None,
+            )
             .unwrap();
-        assert_eq!(t.get_activity(a.id).unwrap().goal, Some(Goal::Decrease));
-        let renamed = t
+        let text = std::fs::read_to_string(store::activity_path(dir.path(), a.id)).unwrap();
+        assert!(text.contains("bound: below"), "{text}");
+        assert_eq!(
+            t.get_activity(a.id).unwrap().target,
+            Some(a.target.unwrap())
+        );
+        let b = t
             .update_activity(
                 a.id,
                 ActivityUpdate {
-                    title: Some("タピオカミルクティー".into()),
+                    title: Some("ハーモニカ".into()),
                     ..Default::default()
                 },
             )
             .unwrap();
-        assert_eq!(renamed.goal, Some(Goal::Decrease));
-        t.update_activity(
-            a.id,
-            ActivityUpdate {
-                goal: Some(Goal::Track),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(t.get_activity(a.id).unwrap().goal, Some(Goal::Track));
+        assert_eq!(b.target, a.target, "an update leaving target out keeps it");
+        let c = t
+            .update_activity(
+                a.id,
+                ActivityUpdate {
+                    target: Some(None),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(c.target, None);
     }
 
     #[test]
-    fn an_activity_without_goal_writes_no_goal_key() {
-        let (d, t) = tally();
+    fn an_activity_without_a_target_writes_no_target_key() {
+        let (dir, t) = tally();
         let a = t.create_activity("筋トレ", None, None, None, None).unwrap();
-        let text = std::fs::read_to_string(store::activity_path(d.path(), a.id)).unwrap();
-        assert!(!text.contains("goal"), "{text}");
-        assert_eq!(t.get_activity(a.id).unwrap().goal, None);
+        let text = std::fs::read_to_string(store::activity_path(dir.path(), a.id)).unwrap();
+        assert!(!text.contains("target"), "{text}");
+        assert_eq!(t.get_activity(a.id).unwrap().target, None);
     }
 
     #[test]
