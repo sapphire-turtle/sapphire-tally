@@ -811,21 +811,30 @@ impl TallyView {
                             ui.label(form::unit_name(form.unit));
                         }
                         ui.end_row();
-                        ui.label("Goal");
+                        ui.label("Target");
                         if window.editing {
-                            egui::ComboBox::from_id_salt("activity_goal")
-                                .selected_text(form::goal_name(form.goal))
-                                .show_ui(ui, |ui| {
-                                    for goal in form::GOALS {
-                                        ui.selectable_value(
-                                            &mut form.goal,
-                                            goal,
-                                            form::goal_name(goal),
-                                        );
-                                    }
-                                });
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut form.times)
+                                        .desired_width(100.0)
+                                        .hint_text("only counted"),
+                                );
+                                for bound in form::BOUNDS {
+                                    ui.selectable_value(
+                                        &mut form.bound,
+                                        bound,
+                                        form::bound_name(bound),
+                                    );
+                                }
+                            });
                         } else {
-                            ui.label(form::goal_name(form.goal));
+                            ui.label(
+                                form.target()
+                                    .ok()
+                                    .flatten()
+                                    .map(|t| t.to_string())
+                                    .unwrap_or_else(|| "only counted".to_owned()),
+                            );
                         }
                         ui.end_row();
                         ui.label("Color");
@@ -1222,7 +1231,7 @@ mod tests {
             id: "012atvw".parse().unwrap(),
             title: "筋トレ".into(),
             unit: None,
-            goal: None,
+            target: None,
             color: None,
             description: None,
         };

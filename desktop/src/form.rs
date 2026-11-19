@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone as _};
 use grain_id::GrainId;
-use sapphire_tally_core::{Activity, Color, Goal, Stamp, Unit};
+use sapphire_tally_core::{Activity, Bound, Color, Stamp, Target, Unit};
 use sapphire_tally_mcp::methods::{
     ActivityAddParams, ActivityUpdateParams, StampAddParams, StampUpdateParams,
 };
@@ -16,22 +16,17 @@ use sapphire_tally_mcp::methods::{
 pub const TIME_FORMAT: &str = "%Y-%m-%d %H:%M";
 
 pub const UNITS: [Unit; 3] = [Unit::Day, Unit::Week, Unit::Month];
+pub const BOUNDS: [Bound; 2] = [Bound::Above, Bound::Below];
+
+pub fn bound_name(bound: Bound) -> &'static str {
+    bound.name()
+}
 
 pub fn unit_name(unit: Unit) -> &'static str {
     match unit {
         Unit::Day => "day",
         Unit::Week => "week",
         Unit::Month => "month",
-    }
-}
-
-pub const GOALS: [Goal; 3] = [Goal::Track, Goal::Increase, Goal::Decrease];
-
-pub fn goal_name(goal: Goal) -> &'static str {
-    match goal {
-        Goal::Track => "track",
-        Goal::Increase => "increase",
-        Goal::Decrease => "decrease",
     }
 }
 
@@ -118,7 +113,9 @@ impl StampForm {
 pub struct ActivityForm {
     pub title: String,
     pub unit: Unit,
-    pub goal: Goal,
+    /// The target count, empty when the activity is only counted.
+    pub times: String,
+    pub bound: Bound,
     /// `None` is drawn in the colour the title hashes to, and never written.
     pub color: Option<Color>,
     pub description: String,
@@ -130,7 +127,11 @@ impl ActivityForm {
         ActivityForm {
             title: activity.title.clone(),
             unit: activity.unit.unwrap_or_default(),
-            goal: activity.goal.unwrap_or_default(),
+            times: activity
+                .target
+                .map(|t| t.times.to_string())
+                .unwrap_or_default(),
+            bound: activity.target.map(|t| t.bound).unwrap_or_default(),
             color: activity.color,
             description: activity.description.clone().unwrap_or_default(),
         }
@@ -144,23 +145,37 @@ impl ActivityForm {
         Ok(title.to_owned())
     }
 
+    pub fn target(&self) -> Result<Option<Target>, String> {
+        let times = self.times.trim();
+        if times.is_empty() {
+            return Ok(None);
+        }
+        let times = times
+            .parse::<u32>()
+            .map_err(|_| format!("the times must be a whole number, got `{times}`"))?;
+        Ok(Some(Target {
+            times,
+            bound: self.bound,
+        }))
+    }
+
     pub fn to_add_params(&self) -> Result<ActivityAddParams, String> {
         Ok(ActivityAddParams {
             title: self.title()?,
             unit: Some(unit_name(self.unit).to_owned()),
-            goal: Some(goal_name(self.goal).to_owned()),
+            target: self.target()?.map(|t| t.to_string()),
             color: self.color.map(|c| c.to_string()),
             description: Some(self.description.clone()),
         })
     }
 
-    /// Every field, so an emptied description is removed.
+    /// Every field, so an emptied target or description is removed.
     pub fn to_update_params(&self, id: GrainId) -> Result<ActivityUpdateParams, String> {
         Ok(ActivityUpdateParams {
             id: id.to_string(),
             title: Some(self.title()?),
             unit: Some(unit_name(self.unit).to_owned()),
-            goal: Some(goal_name(self.goal).to_owned()),
+            target: Some(self.target()?.map(|t| t.to_string()).unwrap_or_default()),
             // Every field, so a colour set back to the default is removed.
             color: Some(self.color.map(|c| c.to_string()).unwrap_or_default()),
             description: Some(self.description.clone()),
@@ -237,20 +252,108 @@ mod tests {
     }
 
     #[test]
-    fn activity_form_sends_its_goal() {
+    fn the_activity_form_reads_its_target_back() {
         let mut form = ActivityForm {
             title: "タピオカ".into(),
-            ..ActivityForm::default()
+            times: " 3 ".into(),
+            bound: Bound::Below,
+            ..Default::default()
         };
-        assert_eq!(form.to_add_params().unwrap().goal.as_deref(), Some("track"));
-        form.goal = Goal::Decrease;
+        assert_eq!(
+            form.to_add_params().unwrap().target.as_deref(),
+            Some("3-below")
+        );
+        form.bound = Bound::Above;
         assert_eq!(
             form.to_update_params(id("012atvw"))
                 .unwrap()
-                .goal
+                .target
                 .as_deref(),
-            Some("decrease")
+            Some("3-above")
         );
+        form.times.clear();
+        assert_eq!(
+            form.to_update_params(id("012atvw"))
+                .unwrap()
+                .target
+                .as_deref(),
+            Some(""),
+            "an emptied target removes it"
+        );
+        form.times = "often".into();
+        assert!(
+            form.to_update_params(id("012atvw"))
+                .unwrap_err()
+                .contains("often")
+        );
+    }
+
+    #[test]
+    fn editing_an_activity_reads_its_target_or_defaults() {
+        let mut activity = Activity {
+            id: id("012atvw"),
+            title: "タピオカ".into(),
+            unit: None,
+            target: Some("3-below".parse().unwrap()),
+            color: None,
+            description: None,
+        };
+        let form = ActivityForm::edit(&activity);
+        assert_eq!(form.times, "3");
+        assert_eq!(form.bound, Bound::Below);
+        assert_eq!(
+            form.to_update_params(activity.id)
+                .unwrap()
+                .target
+                .as_deref(),
+            Some("3-below")
+        );
+
+        activity.target = None;
+        let form = ActivityForm::edit(&activity);
+        assert_eq!(form.times, "");
+        assert_eq!(form.bound, Bound::Above);
+        assert_eq!(form.to_add_params().unwrap().target, None);
+        assert_eq!(
+            form.to_update_params(activity.id)
+                .unwrap()
+                .target
+                .as_deref(),
+            Some("")
+        );
+    }
+
+    #[test]
+    fn target_count_accepts_u32_and_rejects_invalid_values() {
+        let mut form = ActivityForm {
+            title: "筋トレ".into(),
+            ..Default::default()
+        };
+        form.times = "   ".into();
+        assert_eq!(form.to_add_params().unwrap().target, None);
+        assert_eq!(
+            form.to_update_params(id("012atvw"))
+                .unwrap()
+                .target
+                .as_deref(),
+            Some("")
+        );
+        for value in ["0", "4294967295"] {
+            form.times = value.into();
+            assert_eq!(
+                form.to_add_params().unwrap().target.as_deref(),
+                Some(format!("{value}-above").as_str())
+            );
+        }
+        for value in ["-1", "3.5", "4294967296"] {
+            form.times = value.into();
+            assert!(form.to_add_params().unwrap_err().contains(value));
+            assert!(
+                form.to_update_params(id("012atvw"))
+                    .unwrap_err()
+                    .contains(value)
+            );
+        }
     }
 
     #[test]

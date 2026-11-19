@@ -101,7 +101,7 @@ sapphire-tally/
 
 ## Data format
 
-- `<workspace>/activities/<grain-id>.md` — an activity: `title` (required) and `unit` (optional: day/week/month) in front matter, the description as the body
+- `<workspace>/activities/<grain-id>.md` — an activity: `title` (required), `unit` (optional: day/week/month, the period stamps are counted and drawn in), and `target` (optional: `times` and `bound`, written as `N-bound` in text, e.g. `3-below`) in front matter, the description as the body
 - `<workspace>/stamps/<grain-id>.md` — a stamp: `activity` and `timestamp` in front matter, the comment as the body
 - Filenames are grain-ids (7-char BASE32). Each file also carries an `id` field, but the filename is authoritative.
 

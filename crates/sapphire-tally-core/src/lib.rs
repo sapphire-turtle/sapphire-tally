@@ -17,7 +17,8 @@ pub mod tally;
 
 pub use error::{Error, Result};
 pub use model::{
-    Activity, ActivityUpdate, Color, Goal, HeatmapBucket, Stamp, StampUpdate, Swatch, Unit,
+    Activity, ActivityUpdate, Bound, Color, HeatmapBucket, Stamp, StampUpdate, Status, Swatch,
+    Target, Unit,
 };
 pub use tally::Tally;
 

@@ -98,7 +98,7 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
         .activity_add(Parameters(ActivityAddParams {
             title: "practice".into(),
             unit: None,
-            goal: None,
+            target: Some("2-above".into()),
             color: None,
             description: None,
         }))
@@ -134,6 +134,8 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
     let heat: serde_json::Value = serde_json::from_str(&heat).unwrap();
     assert_eq!(heat[0]["period"], "2026-09-05");
     assert_eq!(heat[0]["count"], 1);
+    assert_eq!(heat[0]["target"]["times"], 2);
+    assert_eq!(heat[0]["status"], "under");
 
     // A refused write comes back as the tally's reason.
     let err = tools
