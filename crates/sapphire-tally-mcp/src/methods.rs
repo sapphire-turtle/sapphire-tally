@@ -624,7 +624,8 @@ mod tests {
         let got: serde_json::Value =
             serde_json::from_str(&m.stamp_get(IdParams { id: stamp_id }).unwrap()).unwrap();
         assert!(got.get("comment").is_none(), "{got}");
-        assert_eq!(got["timestamp"], "2026-09-05T09:12:00+09:00");
+        let written: jiff::Timestamp = got["timestamp"].as_str().unwrap().parse().unwrap();
+        assert_eq!(written, "2026-09-05T09:12:00+09:00".parse().unwrap());
     }
 
     #[test]

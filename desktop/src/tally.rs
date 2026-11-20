@@ -1204,10 +1204,10 @@ mod tests {
     #[test]
     fn a_pick_lists_its_stamps_newest_first() {
         let stamps = [
-            stamp("012ats1", "012atvw", "2026-09-05T08:00:00+09:00"),
-            stamp("012ats2", "012atvw", "2026-09-06T00:10:00+09:00"),
-            stamp("012ats3", "012atvx", "2026-09-05T12:00:00+09:00"),
-            stamp("012ats4", "012atvw", "2026-09-05T23:30:00+09:00"),
+            stamp("012ats1", "012atvw", "2026-09-05T08:00:00"),
+            stamp("012ats2", "012atvw", "2026-09-06T00:10:00"),
+            stamp("012ats3", "012atvx", "2026-09-05T12:00:00"),
+            stamp("012ats4", "012atvw", "2026-09-05T23:30:00"),
         ];
         let ids = |pick: Pick| -> Vec<String> {
             pick.stamps(&stamps)
@@ -1243,9 +1243,16 @@ mod tests {
         };
         let text =
             r#"{"id":"012atvx","activity":"012atvw","timestamp":"2026-09-05T09:12:00+09:00"}"#;
+        // Shown in the host's time zone, whatever offset the server wrote.
+        let shown = "2026-09-05T09:12:00+09:00"
+            .parse::<jiff::Timestamp>()
+            .unwrap()
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
+            .strftime("%Y-%m-%d %H:%M")
+            .to_string();
         assert_eq!(
             describe_stamp(text, Some(&data)),
-            "a stamp for 筋トレ at 2026-09-05 09:12"
+            format!("a stamp for 筋トレ at {shown}")
         );
         assert_eq!(describe_stamp("not json", None), "the stamp");
     }

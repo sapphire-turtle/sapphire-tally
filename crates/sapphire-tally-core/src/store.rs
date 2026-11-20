@@ -197,7 +197,11 @@ mod tests {
         let text = std::fs::read_to_string(stamp_path(dir.path(), stamp.id)).unwrap();
         let (front, body) = sapphire_frontmatter::split(&text).unwrap();
         assert!(!front.contains("comment"), "{text}");
-        assert!(front.contains("2026-09-05T09:12:00+09:00"), "{text}");
+        // Written with the host's offset, whatever time zone the test runs in.
+        assert!(
+            front.contains(&crate::time::format(stamp.timestamp)),
+            "{text}"
+        );
         assert_eq!(body, "\n横浜で買った\n\n- 甘さ控えめ\n");
 
         assert_eq!(read_stamp(dir.path(), stamp.id).unwrap(), stamp);

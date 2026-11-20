@@ -297,6 +297,12 @@ mod tests {
         s.parse().unwrap()
     }
 
+    /// A wall-clock time in the host's time zone. Tests about which day or
+    /// week a stamp falls in use it, so they hold wherever they run.
+    fn wall(s: &str) -> Timestamp {
+        crate::time::from_local(s.parse().unwrap()).unwrap()
+    }
+
     #[test]
     fn open_creates_both_directories() {
         let (dir, _) = tally();
@@ -365,11 +371,11 @@ mod tests {
             .create_activity("タピオカ", None, None, None, None)
             .unwrap();
         let b = t.create_activity("筋トレ", None, None, None, None).unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-02T10:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-02T10:00:00")), None)
             .unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-04T10:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-04T10:00:00")), None)
             .unwrap();
-        t.add_stamp(b.id, Some(ts("2026-09-03T10:00:00+09:00")), None)
+        t.add_stamp(b.id, Some(wall("2026-09-03T10:00:00")), None)
             .unwrap();
 
         let all = t.list_stamps(None, None, None).unwrap();
@@ -507,11 +513,11 @@ mod tests {
         let a = t
             .create_activity("タピオカ", None, None, None, None)
             .unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-02T09:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-02T09:00:00")), None)
             .unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-02T21:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-02T21:00:00")), None)
             .unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-03T09:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-03T09:00:00")), None)
             .unwrap();
         let buckets = t.heatmap(None, None, None).unwrap();
         assert_eq!(buckets.len(), 2);
@@ -521,20 +527,39 @@ mod tests {
     }
 
     #[test]
+    fn a_stamp_counts_on_the_host_day_not_the_day_it_was_written_in() {
+        let (_dir, t) = tally();
+        let a = t
+            .create_activity("タピオカ", None, None, None, None)
+            .unwrap();
+        // Late on 2 September at UTC-12, which is already 3 September in UTC
+        // and in Japan: the written offset must not pick the day.
+        let stamp = ts("2026-09-02T23:30:00-12:00");
+        t.add_stamp(a.id, Some(stamp), None).unwrap();
+        let host_day = stamp.to_zoned_datetime(jiff::tz::TimeZone::system()).date();
+
+        let buckets = t.heatmap(None, None, None).unwrap();
+        assert_eq!(buckets.len(), 1);
+        assert_eq!(buckets[0].period, host_day.to_string());
+        let on_host_day = t.list_stamps(None, Some(host_day), Some(host_day)).unwrap();
+        assert_eq!(on_host_day.len(), 1);
+    }
+
+    #[test]
     fn heatmap_groups_by_week_and_month_per_activity_unit() {
         let (_dir, t) = tally();
         let a = t
             .create_activity("週一習慣", Some(Unit::Week), None, None, None)
             .unwrap();
         // Two stamps inside 2026-W36 (2026-08-31 to 09-06).
-        t.add_stamp(a.id, Some(ts("2026-09-01T09:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-01T09:00:00")), None)
             .unwrap();
-        t.add_stamp(a.id, Some(ts("2026-09-05T09:00:00+09:00")), None)
+        t.add_stamp(a.id, Some(wall("2026-09-05T09:00:00")), None)
             .unwrap();
         let m = t
             .create_activity("月一習慣", Some(Unit::Month), None, None, None)
             .unwrap();
-        t.add_stamp(m.id, Some(ts("2026-09-15T09:00:00+09:00")), None)
+        t.add_stamp(m.id, Some(wall("2026-09-15T09:00:00")), None)
             .unwrap();
 
         let buckets = t.heatmap(None, None, None).unwrap();
