@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-mcp-v0.2.2...sapphire-tally-mcp-v0.3.0) - 2026-11-20
+
+### Breaking
+
+- `stamp_list` and `heatmap` entries carry the activity's title, its target and how the count stands against it (`met`, `under`, `exceeded`); the app API version is 3.
+
+### Added
+
+- Set and clear an activity's target and colour.
+
 ### Changed
 
 - A stamp's `timestamp` may leave out the offset: it is then a time in the server's time zone.

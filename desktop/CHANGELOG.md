@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/sapphire-turtle/sapphire-tally/compare/v0.3.0...v0.4.0) - 2026-11-20
+
 ### Added
 
+- An activity's form sets its target — N times a unit, at least or at most — or leaves the activity only counted, and picks its colour.
+- Each activity's heatmap is drawn in its own colour, in shades that follow the theme; an activity without one takes a colour from its title.
 - The status bar says whether your edits have reached another device — "Syncing…", "Not sent — no peer connected", or "Synced to *device* · HH:MM" — so you can tell when it is safe to close the computer. In a narrow window, a ring around the status dot shows that an edit has not been sent yet (sapphire-framework 0.29.1).
 
 ### Changed
