@@ -14,6 +14,7 @@ pub mod error;
 pub mod model;
 pub mod store;
 pub mod tally;
+pub mod time;
 
 pub use error::{Error, Result};
 pub use model::{

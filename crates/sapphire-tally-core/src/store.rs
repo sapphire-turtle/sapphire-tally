@@ -15,8 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, FixedOffset};
 use grain_id::GrainId;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -49,7 +49,8 @@ struct ActivityFront {
 struct StampFront {
     id: GrainId,
     activity: GrainId,
-    timestamp: DateTime<FixedOffset>,
+    #[serde(with = "crate::time::rfc3339")]
+    timestamp: Timestamp,
 }
 
 pub fn read_activity(root: &Path, id: GrainId) -> Result<Activity> {
@@ -176,8 +177,8 @@ pub fn normalize_text(text: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn ts(s: &str) -> DateTime<FixedOffset> {
-        DateTime::parse_from_rfc3339(s).unwrap()
+    fn ts(s: &str) -> Timestamp {
+        s.parse().unwrap()
     }
 
     #[test]
@@ -196,7 +197,11 @@ mod tests {
         let text = std::fs::read_to_string(stamp_path(dir.path(), stamp.id)).unwrap();
         let (front, body) = sapphire_frontmatter::split(&text).unwrap();
         assert!(!front.contains("comment"), "{text}");
-        assert!(front.contains("2026-09-05T09:12:00+09:00"), "{text}");
+        // Written with the host's offset, whatever time zone the test runs in.
+        assert!(
+            front.contains(&crate::time::format(stamp.timestamp)),
+            "{text}"
+        );
         assert_eq!(body, "\n横浜で買った\n\n- 甘さ控えめ\n");
 
         assert_eq!(read_stamp(dir.path(), stamp.id).unwrap(), stamp);

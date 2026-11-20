@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A stamp's `timestamp` may leave out the offset: it is then a time in the server's time zone.
+- sapphire-framework 0.29, corundum-framework 0.13.
+
 ## [0.2.2](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-mcp-v0.2.1...sapphire-tally-mcp-v0.2.2) - 2026-11-06
 
 ### Changed

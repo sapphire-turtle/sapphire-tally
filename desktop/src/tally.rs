@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use chrono::{Datelike as _, Days, Local, NaiveDate};
 use grain_id::GrainId;
+use jiff::civil::Date;
 use sapphire_framework::gui::theme::{self, Tint, TintPicker, Tone};
 use sapphire_framework::gui::{Side, egui, tr};
 use sapphire_tally_core::{Activity, Stamp};
@@ -78,13 +78,13 @@ struct Window<F> {
 struct Pick {
     activity: GrainId,
     /// `None` for the whole range.
-    day: Option<NaiveDate>,
+    day: Option<Date>,
 }
 
 impl Pick {
     /// The pick after `day` is clicked in `activity`'s heatmap: that day, or
     /// back to the whole activity when it was the day picked already.
-    fn day_clicked(current: Option<Pick>, activity: GrainId, day: NaiveDate) -> Pick {
+    fn day_clicked(current: Option<Pick>, activity: GrainId, day: Date) -> Pick {
         let again = current
             == Some(Pick {
                 activity,
@@ -101,7 +101,10 @@ impl Pick {
         let mut picked: Vec<&Stamp> = stamps
             .iter()
             .filter(|s| s.activity == self.activity)
-            .filter(|s| self.day.is_none_or(|d| s.timestamp.date_naive() == d))
+            .filter(|s| {
+                self.day
+                    .is_none_or(|d| sapphire_tally_core::time::local_date(s.timestamp) == d)
+            })
             .collect();
         picked.sort_by_key(|s| std::cmp::Reverse(s.timestamp));
         picked
@@ -437,7 +440,7 @@ impl TallyView {
     fn range_bar(&mut self, ui: &mut egui::Ui) {
         let mut moved = None;
         if ui.button("◀").on_hover_text("A year earlier").clicked() {
-            moved = Some(self.grid.end - Days::new(heatmap::WEEKS * 7));
+            moved = Some(self.grid.end - jiff::Span::new().days(heatmap::WEEKS as i64 * 7));
         }
         let latest = self.grid.end >= today();
         if ui
@@ -445,7 +448,9 @@ impl TallyView {
             .on_hover_text("A year later")
             .clicked()
         {
-            moved = Some((self.grid.end + Days::new(heatmap::WEEKS * 7)).min(today()));
+            moved = Some(
+                (self.grid.end + jiff::Span::new().days(heatmap::WEEKS as i64 * 7)).min(today()),
+            );
         }
         if ui
             .add_enabled(!latest, egui::Button::new("Today"))
@@ -588,7 +593,7 @@ impl TallyView {
                         .spacing([16.0, 4.0])
                         .show(ui, |ui| {
                             for stamp in stamps {
-                                let when = stamp.timestamp.format(form::TIME_FORMAT).to_string();
+                                let when = form::shown(stamp.timestamp);
                                 if ui.link(when).on_hover_text(&hover).clicked() {
                                     open = Some(stamp.clone());
                                 }
@@ -615,7 +620,7 @@ impl TallyView {
     // ── windows ─────────────────────────────────────────────────────────────
 
     fn open_new_stamp(&mut self, activity: GrainId) {
-        let mut form = StampForm::new(Some(activity), Local::now().fixed_offset());
+        let mut form = StampForm::new(Some(activity), jiff::Timestamp::now());
         // A stamp added while a past day is picked is most likely for that day.
         if let Some(Pick {
             activity: id,
@@ -1018,10 +1023,10 @@ fn window_buttons(
 fn heatmap_ui(
     ui: &mut egui::Ui,
     grid: Grid,
-    counts: &BTreeMap<NaiveDate, u32>,
-    picked: Option<NaiveDate>,
+    counts: &BTreeMap<Date, u32>,
+    picked: Option<Date>,
     tint: Tint,
-) -> Option<NaiveDate> {
+) -> Option<Date> {
     let max = counts.values().copied().max().unwrap_or(0);
     let palette = color::shades(&theme::current(ui.ctx()), tint);
     let step = CELL + GAP;
@@ -1054,7 +1059,7 @@ fn heatmap_ui(
             painter.text(
                 egui::pos2(x, rect.min.y),
                 egui::Align2::LEFT_TOP,
-                first.format("%b").to_string(),
+                first.strftime("%b").to_string(),
                 font.clone(),
                 text_color,
             );
@@ -1118,10 +1123,7 @@ fn describe_stamp(text: &str, data: Option<&Data>) -> String {
     let title = data
         .and_then(|d| d.activities.iter().find(|a| a.id == stamp.activity))
         .map_or_else(|| stamp.activity.to_string(), |a| a.title.clone());
-    format!(
-        "a stamp for {title} at {}",
-        stamp.timestamp.format(form::TIME_FORMAT)
-    )
+    format!("a stamp for {title} at {}", form::shown(stamp.timestamp))
 }
 
 fn describe_activity(text: &str) -> String {
@@ -1152,8 +1154,8 @@ fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or_default()
 }
 
-fn today() -> NaiveDate {
-    Local::now().date_naive()
+fn today() -> Date {
+    sapphire_tally_core::time::local_date(jiff::Timestamp::now())
 }
 
 #[cfg(test)]
@@ -1164,7 +1166,7 @@ mod tests {
         Stamp {
             id: id.parse().unwrap(),
             activity: activity.parse().unwrap(),
-            timestamp: chrono::DateTime::parse_from_rfc3339(ts).unwrap(),
+            timestamp: sapphire_tally_core::time::parse(ts).unwrap(),
             comment: None,
         }
     }
@@ -1173,7 +1175,7 @@ mod tests {
     fn a_day_clicked_again_goes_back_to_the_whole_activity() {
         let a: GrainId = "012atvw".parse().unwrap();
         let b: GrainId = "012atvx".parse().unwrap();
-        let day = NaiveDate::from_ymd_opt(2026, 9, 5).unwrap();
+        let day = jiff::civil::date(2026, 9, 5);
         let picked = Pick::day_clicked(None, a, day);
         assert_eq!(
             picked,
@@ -1202,10 +1204,10 @@ mod tests {
     #[test]
     fn a_pick_lists_its_stamps_newest_first() {
         let stamps = [
-            stamp("012ats1", "012atvw", "2026-09-05T08:00:00+09:00"),
-            stamp("012ats2", "012atvw", "2026-09-06T00:10:00+09:00"),
-            stamp("012ats3", "012atvx", "2026-09-05T12:00:00+09:00"),
-            stamp("012ats4", "012atvw", "2026-09-05T23:30:00+09:00"),
+            stamp("012ats1", "012atvw", "2026-09-05T08:00:00"),
+            stamp("012ats2", "012atvw", "2026-09-06T00:10:00"),
+            stamp("012ats3", "012atvx", "2026-09-05T12:00:00"),
+            stamp("012ats4", "012atvw", "2026-09-05T23:30:00"),
         ];
         let ids = |pick: Pick| -> Vec<String> {
             pick.stamps(&stamps)
@@ -1221,7 +1223,7 @@ mod tests {
             }),
             ["012ats2", "012ats4", "012ats1"]
         );
-        let day = NaiveDate::from_ymd_opt(2026, 9, 5);
+        let day = Some(jiff::civil::date(2026, 9, 5));
         assert_eq!(ids(Pick { activity, day }), ["012ats4", "012ats1"]);
     }
 
@@ -1241,9 +1243,16 @@ mod tests {
         };
         let text =
             r#"{"id":"012atvx","activity":"012atvw","timestamp":"2026-09-05T09:12:00+09:00"}"#;
+        // Shown in the host's time zone, whatever offset the server wrote.
+        let shown = "2026-09-05T09:12:00+09:00"
+            .parse::<jiff::Timestamp>()
+            .unwrap()
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
+            .strftime("%Y-%m-%d %H:%M")
+            .to_string();
         assert_eq!(
             describe_stamp(text, Some(&data)),
-            "a stamp for 筋トレ at 2026-09-05 09:12"
+            format!("a stamp for 筋トレ at {shown}")
         );
         assert_eq!(describe_stamp("not json", None), "the stamp");
     }

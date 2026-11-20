@@ -110,7 +110,9 @@ async fn the_tools_work_on_the_servers_workspace_over_ipc() {
     tools
         .stamp_add(Parameters(StampAddParams {
             activity: id.clone(),
-            timestamp: Some("2026-09-05T09:12:00+09:00".into()),
+            // No offset: a wall-clock time in the server's time zone, so the
+            // heatmap day below holds wherever the test runs.
+            timestamp: Some("2026-09-05T09:12:00".into()),
             comment: None,
         }))
         .await

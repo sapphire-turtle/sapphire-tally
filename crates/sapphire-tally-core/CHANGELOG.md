@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- A stamp's time is `jiff::Timestamp`, not chrono's `DateTime<FixedOffset>`: chrono is unmaintained (RUSTSEC-2026-0543). `Stamp`, `StampUpdate` and `Tally::add_stamp` change type; `time` has the helpers (`now`, `local`, `local_date`, `parse`, `format`).
+
+### Changed
+
+- Stamps are written as before, in this host's offset (`2026-09-05T09:12:34+09:00`), and releases on chrono still read them. A time without an offset is read in this host's time zone, where it made the stamp unreadable before.
+- Stamps count toward the day they fall on in this host's time zone (`list_stamps`, `heatmap`), not the day in the offset they were recorded in.
+- sapphire-framework 0.29, corundum-framework 0.13.
+
 ## [0.1.3](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.2...sapphire-tally-core-v0.1.3) - 2026-11-06
 
 ### Changed

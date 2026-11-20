@@ -175,14 +175,17 @@ mod tests {
             .await
             .expect("the activity form's parameters are what the server takes");
 
-        let now = chrono::DateTime::parse_from_rfc3339("2026-09-05T09:12:34+09:00").unwrap();
+        let now = sapphire_tally_core::time::parse("2026-09-05T09:12:34").unwrap();
         let mut form = StampForm::new(Some(activity.id), now);
         form.comment = "30回".into();
         let stamp: Stamp = client
             .read(names::STAMP_ADD, form.to_add_params().unwrap())
             .await
             .expect("the stamp form's parameters are what the server takes");
-        assert_eq!(stamp.timestamp.to_rfc3339(), "2026-09-05T09:12:00+09:00");
+        assert_eq!(
+            stamp.timestamp,
+            sapphire_tally_core::time::parse("2026-09-05T09:12").unwrap()
+        );
 
         let mut form = StampForm::edit(&stamp);
         form.comment.clear();

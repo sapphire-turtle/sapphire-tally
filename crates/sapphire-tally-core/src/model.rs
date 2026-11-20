@@ -1,5 +1,5 @@
-use chrono::{DateTime, FixedOffset};
 use grain_id::GrainId;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// The period an activity's stamps are counted and drawn in, and the period
@@ -272,7 +272,8 @@ pub struct Stamp {
     /// when they disagree, with a warning.
     pub id: GrainId,
     pub activity: GrainId,
-    pub timestamp: DateTime<FixedOffset>,
+    #[serde(with = "crate::time::rfc3339")]
+    pub timestamp: Timestamp,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 }
@@ -296,7 +297,7 @@ pub struct ActivityUpdate {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StampUpdate {
     pub activity: Option<GrainId>,
-    pub timestamp: Option<DateTime<FixedOffset>>,
+    pub timestamp: Option<Timestamp>,
     pub comment: Option<String>,
 }
 
