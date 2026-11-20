@@ -11,7 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(install)* install the CLI with this repository's script, checking its signature
+- An install script in this repository, `install/install.sh` (`install/install.ps1` on Windows), installs the CLI from the latest release. It checks each download against the SHA-256 GitHub records for it and, when minisign is on the PATH, against its signature by sapphire-turtle's key; `--require-signature` (`-RequireSignature`) fails instead of warning when minisign is missing. It no longer installs sapphire-bridge along with it.
+- Activities have a target — N times a unit, at least (`above`) or at most (`below`) — or are only counted, and a colour: a theme swatch or `oklch(C H)`. The MCP tools set and clear them.
+
+### Changed
+
+- **Breaking:** sapphire-framework 0.29.1 and corundum-framework 0.13. The IPC handshake's API version is 7, so this release's CLI and MCP server talk only to an app server of this release. Times are jiff's, not chrono's, which is unmaintained (RUSTSEC-2026-0543).
+- **Breaking:** `stamp_list` and `heatmap` entries carry the activity's title, its target and how the count stands against it (`met`, `under`, `exceeded`); the app API version is 3.
+- Stamps count toward the day they fall on in this host's time zone; a stamp without an offset is read in it rather than skipped.
 
 ## [0.3.0](https://github.com/sapphire-turtle/sapphire-tally/compare/v0.2.1...v0.3.0) - 2026-11-06
 
