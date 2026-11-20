@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-server-v0.3.0...sapphire-tally-server-v0.4.0) - 2026-11-20
+
+### Added
+
+- *(mcp)* [**breaking**] log entries carry the activity's target, and its count's status ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- *(mcp)* set and clear an activity's colour ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(mcp)* [**breaking**] log entries carry the activity's title and goal ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+
+### Other
+
+- hold the time tests in any host time zone
+
 ## [0.3.0](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-server-v0.2.1...sapphire-tally-server-v0.3.0) - 2026-11-06
 
 ### Changed

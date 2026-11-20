@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-mcp-v0.2.2...sapphire-tally-mcp-v0.3.0) - 2026-11-20
+
+### Added
+
+- *(mcp)* [**breaking**] log entries carry the activity's target, and its count's status ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- *(mcp)* set and clear an activity's colour ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(mcp)* [**breaking**] log entries carry the activity's title and goal ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+
+### Fixed
+
+- *(mcp)* clarify target update and preserve absent form target ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- an even heatmap ramp, a colour that survives saving, and an empty colour on add ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(mcp)* stamps of an unreadable activity still count in the logs ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+
+### Other
+
+- hold the time tests in any host time zone
+- [**breaking**] times are jiff's, not chrono's (RUSTSEC-2026-0543)
+
 ### Changed
 
 - A stamp's `timestamp` may leave out the offset: it is then a time in the server's time zone.

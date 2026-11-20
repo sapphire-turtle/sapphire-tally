@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/sapphire-turtle/sapphire-tally/compare/sapphire-tally-core-v0.1.3...sapphire-tally-core-v0.2.0) - 2026-11-20
+
+### Added
+
+- *(core)* [**breaking**] an activity's target: N times a unit, above or below ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- *(core)* an activity's colour, a swatch or oklch(C H) ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(core)* an activity's goal: increase, decrease or track ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+
+### Other
+
+- hold the time tests in any host time zone
+- [**breaking**] times are jiff's, not chrono's (RUSTSEC-2026-0543)
+
 ### Breaking
 
 - A stamp's time is `jiff::Timestamp`, not chrono's `DateTime<FixedOffset>`: chrono is unmaintained (RUSTSEC-2026-0543). `Stamp`, `StampUpdate` and `Tally::add_stamp` change type; `time` has the helpers (`now`, `local`, `local_date`, `parse`, `format`).

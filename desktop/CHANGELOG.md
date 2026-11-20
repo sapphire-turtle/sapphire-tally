@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/sapphire-turtle/sapphire-tally/compare/v0.3.0...v0.4.0) - 2026-11-20
+
+### Added
+
+- *(desktop)* [**breaking**] choose an activity's target in its form ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- *(mcp)* [**breaking**] log entries carry the activity's target, and its count's status ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- *(desktop)* each activity's heatmap in its own colour ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(mcp)* set and clear an activity's colour ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+- *(desktop)* choose an activity's goal in its form ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+- *(mcp)* [**breaking**] log entries carry the activity's title and goal ([#53](https://github.com/sapphire-turtle/sapphire-tally/pull/53))
+
+### Fixed
+
+- *(mcp)* clarify target update and preserve absent form target ([#56](https://github.com/sapphire-turtle/sapphire-tally/pull/56))
+- an even heatmap ramp, a colour that survives saving, and an empty colour on add ([#54](https://github.com/sapphire-turtle/sapphire-tally/pull/54))
+
+### Other
+
+- *(deps)* sapphire-framework 0.29.1, which shows when edits reached a peer
+- hold the time tests in any host time zone
+- [**breaking**] times are jiff's, not chrono's (RUSTSEC-2026-0543)
+
 ### Added
 
 - The status bar says whether your edits have reached another device — "Syncing…", "Not sent — no peer connected", or "Synced to *device* · HH:MM" — so you can tell when it is safe to close the computer. In a narrow window, a ring around the status dot shows that an edit has not been sent yet (sapphire-framework 0.29.1).
